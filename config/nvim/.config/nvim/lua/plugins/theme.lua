@@ -34,7 +34,11 @@ return {
           lualine_c = { { 'filename', path = 1 } },
         },
         tabline = {
-          lualine_a = { { 'buffers' } },
+          lualine_a = {
+            { 'buffers',
+              mode = 2 -- Name and index
+            }
+          },
           lualine_b = { {
             function()
               return navic.get_location()
@@ -51,4 +55,4 @@ return {
         callback = require("lualine").refresh,
       })
     end
-  }}
+  } }

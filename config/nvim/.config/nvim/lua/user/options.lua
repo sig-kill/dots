@@ -1,8 +1,9 @@
 require('user/autocommand')
+require('user/commands')
 -------------
 -- Options --
 -------------
-vim.o.sessionoptions = "blank,buffers,curdir,folds,help,tabpages,winsize,winpos,terminal,localoptions"
+vim.opt.sessionoptions = "blank,buffers,curdir,folds,help,tabpages,winsize,winpos,terminal,localoptions"
 vim.opt.mouse = ''
 vim.opt.updatetime = 300
 vim.opt.backup = false
@@ -14,6 +15,8 @@ vim.opt.undofile = true
 vim.opt.conceallevel = 0
 vim.opt.foldenable = false
 
+vim.opt.list = true
+vim.opt.listchars = "tab:▷ ,trail:·,extends:◣,precedes:◢,nbsp:○"
 vim.opt.ignorecase = true
 vim.opt.smartcase = true
 vim.opt.smartindent = true
@@ -52,8 +55,10 @@ keyset("n", "<C-h>", "<C-w>h")
 keyset("n", "<C-j>", "<C-w>j")
 keyset("n", "<C-k>", "<C-w>k")
 keyset("n", "<C-l>", "<C-w>l")
-keyset("n", "g=", function() vim.lsp.buf.format() end)
+keyset("n", "<leader>=", function() vim.lsp.buf.format() end)
 keyset("n", "<C-[>", function() vim.diagnostic.open_float() end)
+keyset("n", "[p", function() vim.diagnostic.jump({ count = -1, float = true }) end, "Jump to previous diagnostic")
+keyset("n", "]p", function() vim.diagnostic.jump({ count = 1, float = true }) end, "Jump to next diagnostic")
 keyset('n', '<leader>s', [[:%s/\<<C-r><C-w>\>/<C-r><C-w>/gI<Left><Left><Left>]],
   'Replace all instances of word')
 keyset('n', '<leader>w', ":CellularAutomaton make_it_rain<CR>",

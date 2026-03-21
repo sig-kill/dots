@@ -46,7 +46,7 @@ global_history = false
 # │  └───────────────────┘  │
 # │                         │
 # └─────────────────────────┘
-ui_scale = 80
+ui_scale = 100
 # What orientation should tv be (landscape or portrait)
 orientation = "landscape"
 # The theme to use for the UI
