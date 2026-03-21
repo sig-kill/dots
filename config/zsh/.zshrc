@@ -1,0 +1,163 @@
+# Dependencies: eza, bat, fasd
+# Updating: znap pull
+
+# Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
+# Initialization code that may require console input (password prompts, [y/n]
+# confirmations, etc.) must go above this block; everything else may go below.
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
+# Uncomment this and the last line to enable profiling.
+# zmodload zsh/zprof
+
+# Plugins
+[[ -r ~/.config/znap/znap/znap.zsh ]] ||
+  git clone --depth 1 -- \
+  https://github.com/marlonrichert/zsh-snap.git ~/.config/znap/znap
+source ~/.config/znap/znap/znap.zsh
+
+znap source romkatv/zsh-defer
+export ZSH_AI_PROVIDER="gemini"
+zsh-defer znap source matheusml/zsh-ai
+znap source TunaCuma/zsh-vi-man
+znap source marlonrichert/zsh-autocomplete
+znap source romkatv/powerlevel10k powerlevel10k.zsh-theme
+
+typeset -U path
+path=(
+  $HOME/bin
+  $HOME/.local/bin
+  $HOME/.cargo/bin
+  $path
+)
+
+## Input
+export EDITOR=nvim
+bindkey -v
+# 'jk' to enter normal mode, with 150ms delay (default 400ms).
+export KEYTIMEOUT=15
+bindkey -M viins 'jk' vi-cmd-mode
+# Change cursor shape for normal mode.
+zle-keymap-select() {
+  if [[ ${KEYMAP} == vicmd ]] || [[ ${KEYMAP} == vitag ]]; then
+    echo -ne '\e[1 q' # block
+  elif [[ ${KEYMAP} == main ]] || [[ ${KEYMAP} == viiins ]] || [[ ${KEYMAP} == "" ]]; then
+    echo -ne '\e[5 q' # beam
+  fi
+}
+zle -N zle-keymap-select
+_fix_cursor() { echo -ne '\e[5 q' }
+precmd_functions+=(_fix_cursor)
+
+# Power <Tab> with tv for certain commands
+TV_SMART_COMMANDS=( cd )
+smart-tab() {
+  # Get current command, after last ; | && ||.
+  local current_cmd="${${(z)${LBUFFER##*[;&|] }}}"
+  # zle -M "Debug: current_cmd='$current_cmd' | LBUFFER='$LBUFFER'"
+  if [[ -n "${TV_SMART_COMMANDS[(r)$current_cmd]}" ]]; then
+    zle tv-smart-autocomplete
+  elif [[ -n "$widgets[menu-selet]" ]]; then
+    zle menu-select
+  else
+    zle expand-or-complete
+  fi
+}
+zle -N smart-tab
+bindkey '^I' smart-tab
+bindkey -M vicmd 'j' down-line
+bindkey -M vicmd 'k' up-line
+bindkey -M vicmd '?' describe-key-briefly
+# <C-x> to edit command line in Vim.
+autoload -Uz edit-command-line
+zle -N edit-command-line
+bindkey '^x' edit-command-line
+# <C-g> to show current mode
+function show-current-mode() {
+  zle -M "Mode: $KEYMAP | zle_state: $ZLE_STATE"
+}
+zle -N show-current-mode
+for mode in main viins vicmd viopp visual isearch menuselect command; do
+  bindkey -M $mode '^g' show-current-mode
+done
+
+## Prompt
+[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(
+  # os_icon               # os identifier
+  context                 # user@hostname
+  dir                     # current directory
+  vcs                     # git status
+  prompt_char             # prompt symbol
+)
+POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(
+  status                  # exit code of the last command
+  command_execution_time  # duration of the last command
+  background_jobs         # presence of background jobs
+  time
+)
+typeset -g POWERLEVEL9K_STATUS_ERROR=true
+
+## Aliases
+znap eval fasd "fasd --init auto"
+[ -f ~/.aliases ] && source ~/.aliases
+function expand-command() {
+  zle _expand_alias
+  zle magic-space
+}
+zle -N expand-command
+bindkey -M main ' ' expand-command
+
+## History
+export HISTFILE="$HOME/.zsh_history"
+[[ -e $HISTFILE ]] || touch "$HISTFILE"
+export HISTSIZE=10000000
+export SAVEHIST=$HISTSIZE
+setopt extended_history       # save timestamps
+setopt inc_append_history     # add executed commands immediately
+setopt share_history          # share history between terminals
+setopt hist_ignore_space      # ignore commands with a space in front
+setopt hist_ignore_all_dups   # ignore duplicates
+setopt hist_save_no_dups      # don't save duplicate history
+setopt hist_expire_dups_first # delete dups first when HISTFILE size exceeds HISTSIZE
+setopt hist_verify            # show history expansion before running
+# cd history tab completion
+setopt auto_pushd                  # pushes the old directory onto the stack
+setopt pushd_minus                 # exchange the meanings of '+' and '-'
+zstyle ':completion:*:directory-stack' list-colors '=(#b) #([0-9]#)*( *)==95=38;5;12'
+
+## Completion (should mostly be handled by zsh-autocomplete)
+zstyle ':autocomplete:*' ignored-input '#*'
+zstyle ':completion:*' use-cache yes
+zstyle ':completion:*' cache-path "${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zcompcache"
+# Fuzzy-match
+zstyle ':completion:*' matcher-list 'm:{a-z}={A-Z}' 'r:|[._-]=* r:|=*' 'l:|=* r:|=*'
+# Include hidden files in completion
+_comp_options+=(globdots)
+# Exclude . and ..
+zstyle ':completion:*' special-dirs false
+
+## WSL config
+if [[ -n $WSL_DISTRO_NAME || $(uname -r) == *microsoft* ]]; then
+  path+=( /mnt/c/Windows/System32 )
+  [[ $PWD == /mnt/c/* ]] && cd ~
+fi
+export PATH
+
+export COLORTERM=truecolor
+# fix NTFS directory colors being unreadable in ls
+[[ -f ~/.dircolors ]] && eval $(dircolors -b ~/.dircolors)
+
+
+[[ -f ~/.work-config ]] && source ~/.work-config
+[[ -f ~/.secrets ]] && source ~/.secrets
+
+[[ -f /etc/bash_completion.d/p4 ]] && source /etc/bash_completion.d/p4
+[[ -f /etc/bash_completion.d/g4d ]] && source /etc/bash_completion.d/g4d
+[[ -f /etc/bash_completion.d/hgd ]] && source /etc/bash_completion.d/hgd
+
+znap eval tv-init "tv init zsh"
+zsh-defer znap source zdharma-continuum/fast-syntax-highlighting
+
+# zprof

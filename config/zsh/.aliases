@@ -1,0 +1,56 @@
+# vim: ft=sh: set et ts=2 sw=2:
+
+alias cz='chezmoi'
+chezmoi () {
+  if [[ "$#" == 0 ]]; then command chezmoi; return; fi
+  local subcommand=$1; shift
+  case $subcommand in
+    pull) command chezmoi git -- pull "$@";;
+    push) command chezmoi git -- push "$@";;
+    *) command chezmoi "$subcommand" "$@";;
+  esac
+}
+alias ls='eza'
+alias cat='bat'
+alias bat='batcat'
+alias fd='fdfind'
+alias j='fasd_cd -d'
+alias tmux='tmx2 new-session -A -s main'
+alias so='source ~/.zshrc'
+alias l='ls -alF --color-scale --icons'
+alias :q='exit'
+alias please='sudo $(fc -ln -1)'
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ....='cd ../../..'
+alias .....='cd ../../../..'
+alias ......='cd ../../../../..'
+alias .......='cd ../../../../../..'
+alias :e='nvim'
+
+function fasd_edit {
+  if [ "$#" -eq 0 ]; then
+    $EDITOR && return
+  fi
+  local file
+  local select
+  test -e "$1" && $EDITOR "$@" && return
+  file="$(fasd -fl "$*")"
+  if [[ -z "$file" ]]; then
+    return
+    #$EDITOR $1 && return
+  fi
+  select="$(echo $file | fzf --delimiter / --with-nth=-5..-1 -1 -0 --height=30% -m --min-height=30 --preview-window=up:60% --info=inline --border --no-sort --preview='bat --theme=1337 --decorations=always --italic-text=always --color=always --line-range :100 {}')"
+  if [[ -z "$select" ]]; then
+    return
+  fi
+  $EDITOR "${=select}"
+}
+
+palette() {
+  local -a colors
+  for i in {000..255}; do
+    colors+=("%F{$i}$i%f")
+  done
+  print -cP $colors
+}
