@@ -1,3 +1,4 @@
+require('user/util')
 require('user/autocommand')
 require('user/commands')
 -------------
@@ -63,3 +64,6 @@ keyset('n', '<leader>s', [[:%s/\<<C-r><C-w>\>/<C-r><C-w>/gI<Left><Left><Left>]],
   'Replace all instances of word')
 keyset('n', '<leader>w', ":CellularAutomaton make_it_rain<CR>",
   "Why Can't I Hold All This Code")
+keyset("n", "gt", ":bnext<CR>", "Next buffer")
+keyset("n", "gT", ":bprevious<CR>", "Previous buffer")
+keyset("n", "<leader>rr", reload_config, "Reload nvim config")

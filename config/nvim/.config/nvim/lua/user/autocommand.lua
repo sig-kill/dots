@@ -39,13 +39,13 @@ autocmd("BufEnter", {
   desc = "Disable continuing comment on newline",
 })
 
-autocmd({ "FocusLost", "BufLeave", "BufWinLeave", "InsertLeave" }, {
-  callback = function()
-    vim.cmd "silent! w"
-  end,
-  group = general,
-  desc = "Autosave",
-})
+-- autocmd({ "FocusLost", "BufLeave", "BufWinLeave", "InsertLeave" }, {
+--   callback = function()
+--     vim.cmd "silent! w"
+--   end,
+--   group = general,
+--   desc = "Autosave",
+-- })
 
 autocmd("VimResized", {
   callback = function()

@@ -40,6 +40,7 @@ return {
         sources = {
           explorer = {
             hidden = true,
+            exclude = {'*.orig'},
           },
         },
         win = {
@@ -54,32 +55,33 @@ return {
       notifier = { enabled = true },
       quickfile = { enabled = true },
       scope = { enabled = true },
-      scroll = { enabled = true },
+      scroll = { enabled = os.getenv("SSH_CONNECTION") == nil },
       statuscolumn = { enabled = true },
       words = { enabled = true },
       rename = { enabled = true },
     },
     keys = {
-      { "<leader>/",   function() Snacks.picker.grep() end,                desc = "Grep" },
-      { "<C-p>",       function() Snacks.picker.smart() end,               desc = "Smart Find Files" },
-      { ":E ",         function() Snacks.picker.files() end,               desc = "Find Files" },
-      { ":b",          function() Snacks.picker.buffers() end,             desc = "Buffers" },
-      { ":B ",         function() Snacks.picker.buffers() end,             desc = "Buffers" },
-      { ":reg<Enter>", function() Snacks.picker.registers() end,           desc = "Registers" },
-      { "<leader>u",   function() Snacks.picker.undo() end,                desc = "Undo tree" },
-      { "<leader>c",   function() Snacks.picker.lazy() end,                desc = "Plugin specs" },
-      { "<leader>p",   function() Snacks.picker.commands() end,            desc = "Commands" },
-      { "gr",          function() Snacks.picker.lsp_references() end,      desc = "Find references" },
-      { "gd",          function() Snacks.picker.lsp_definition() end,      desc = "Go to definition" },
-      { "gD",          function() Snacks.picker.lsp_declarations() end,    desc = "Go to declaration" },
-      { "gI",          function() Snacks.picker.lsp_implementations() end, desc = "Go to implementation" },
-      { "<leader>s",   function() Snacks.picker.lsp_symbols() end,         desc = "LSP symbols" },
+      { "<leader>/",   function() Snacks.picker.grep() end,      desc = "Grep" },
+      { "<C-p>",       function() Snacks.picker.smart() end,     desc = "Smart Find Files" },
+      { ":E ",         function() Snacks.picker.files() end,     desc = "Find Files" },
+      { ":b",          function() Snacks.picker.buffers() end,   desc = "Buffers" },
+      { ":B ",         function() Snacks.picker.buffers() end,   desc = "Buffers" },
+      { ":reg<Enter>", function() Snacks.picker.registers() end, desc = "Registers" },
+      { "<leader>u",   function() Snacks.picker.undo() end,      desc = "Undo tree" },
+      {
+        "<leader>c",
+        function() Snacks.picker.grep({ cwd = vim.fn.stdpath("config") }) end,
+        desc = "Plugin specs"
+      },
+      { "<leader>p", function() Snacks.picker.commands() end,            desc = "Commands" },
+      { "gr",        function() Snacks.picker.lsp_references() end,      desc = "Find references" },
+      { "gd",        function() Snacks.picker.lsp_definition() end,      desc = "Go to definition" },
+      { "gD",        function() Snacks.picker.lsp_declarations() end,    desc = "Go to declaration" },
+      { "gI",        function() Snacks.picker.lsp_implementations() end, desc = "Go to implementation" },
+      { "<leader>s", function() Snacks.picker.lsp_symbols() end,         desc = "LSP symbols" },
       {
         "<leader>l",
-        function()
-          Snacks.picker.explorer(
-            { matcher = { fuzzy = true } })
-        end,
+        function() Snacks.picker.explorer({ matcher = { fuzzy = true } }) end,
         desc = "Explorer"
       }
     }

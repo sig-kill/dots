@@ -26,3 +26,5 @@ require('lazy').setup({
   checker = { enabled = true, notify = false, frequency = 86400 },
   change_detection = { notify = false },
 })
+
+require('lsp')

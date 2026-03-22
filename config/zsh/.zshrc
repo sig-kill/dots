@@ -70,12 +70,11 @@ precmd_functions+=(_fix_cursor)
 TV_SMART_COMMANDS=( cd )
 smart-tab() {
   # Get current command, after last ; | && ||.
-  local current_cmd="${${(z)${LBUFFER##*[;&|] }}}"
-  # zle -M "Debug: current_cmd='$current_cmd' | LBUFFER='$LBUFFER'"
+  local current_cmd="${(z)${LBUFFER##*[;&|] }}"
   if [[ -n "${TV_SMART_COMMANDS[(r)$current_cmd]}" ]]; then
     zle tv-smart-autocomplete
-  elif [[ -n "$widgets[menu-selet]" ]]; then
-    zle menu-select
+  elif [[ -n "$widgets[down-line-or-select]" ]]; then
+    zle down-line-or-select
   else
     zle expand-or-complete
   fi
@@ -169,11 +168,29 @@ export COLORTERM=truecolor
 [[ -f ~/.work-config ]] && source ~/.work-config
 [[ -f ~/.secrets ]] && source ~/.secrets
 
-[[ -f /etc/bash_completion.d/p4 ]] && source /etc/bash_completion.d/p4
-[[ -f /etc/bash_completion.d/g4d ]] && source /etc/bash_completion.d/g4d
-[[ -f /etc/bash_completion.d/hgd ]] && source /etc/bash_completion.d/hgd
-
 znap eval tv-init "tv init zsh"
+
+# Override tv-shell-history to include timestamps
+_tv_shell_history() {
+    emulate -L zsh
+    zle -I
+    _disable_bracketed_paste
+    local current_prompt=$LBUFFER
+    output=$(awk -F': |:0;' '{ if ($2 != "") { printf "[%s]%s\n", strftime("%Y-%m-%d %H:%M:%S", $2), $3 } }' ${HISTFILE:-${HOME}/.zsh_history} | \
+             sed '1!G;h;$!d' | \
+             tv --no-status-bar --input "$current_prompt" \
+                --height 25 \
+                --source-display="{split:]:0}] {split:]:1..}" \
+                --source-output="{split:]:2}")
+    zle reset-prompt
+    if [[ -n $output ]]; then
+        RBUFFER=""
+        LBUFFER=$(echo "$output")
+    fi
+    _enable_bracketed_paste
+}
+zle -N tv-shell-history _tv_shell_history
+
 zsh-defer znap source zdharma-continuum/fast-syntax-highlighting
 #zsh-defer znap source zsh-users/zsh-history-substring-search
 # Up and down search through substring history

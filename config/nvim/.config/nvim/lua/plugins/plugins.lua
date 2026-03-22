@@ -11,7 +11,7 @@ return {
       nes = { enabled = false },
       cli = {
         context = {},
-        prompts = {}
+        prompts = {},
       }
     },
     keys = {
