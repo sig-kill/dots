@@ -3,3 +3,5 @@ config/tv/.config/television/cable/*
 config/nvim/.config/nvim/lazy-lock.json
 config/nvim/.config/nvim/sessions/*
 config/nvim/.config/nvim/lua/lsp/cider.lua
+config/navi/work-cheats/*
+

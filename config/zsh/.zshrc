@@ -13,21 +13,6 @@ fi
 
 bindkey -v
 
-# Plugins
-[[ -r ~/.config/znap/znap/znap.zsh ]] ||
-  git clone --depth 1 -- \
-  https://github.com/marlonrichert/zsh-snap.git ~/.config/znap/znap
-source ~/.config/znap/znap/znap.zsh
-
-znap source romkatv/zsh-defer
-export ZSH_AI_PROVIDER="gemini"
-zsh-defer znap source matheusml/zsh-ai
-znap source TunaCuma/zsh-vi-man
-znap source marlonrichert/zsh-autocomplete
-znap source romkatv/powerlevel10k powerlevel10k.zsh-theme
-ZSH_AUTOSUGGEST_STRATEGY=(history)
-zsh-defer znap source zsh-users/zsh-autosuggestions
-
 typeset -U path
 path=(
   $HOME/bin
@@ -35,6 +20,27 @@ path=(
   $HOME/.cargo/bin
   $path
 )
+
+# Plugins
+[[ -r ~/.config/znap/znap/znap.zsh ]] ||
+  git clone --depth 1 -- \
+  https://github.com/marlonrichert/zsh-snap.git ~/.config/znap/znap
+source ~/.config/znap/znap/znap.zsh
+
+znap source romkatv/zsh-defer
+znap source romkatv/powerlevel10k powerlevel10k.zsh-theme
+znap source TunaCuma/zsh-vi-man
+znap source marlonrichert/zsh-autocomplete
+ZSH_AUTOSUGGEST_STRATEGY=(history)
+znap source zsh-users/zsh-autosuggestions
+export ZSH_AI_PROVIDER="gemini"
+zsh-defer znap source matheusml/zsh-ai
+
+# cargo install --locked zsh-patina
+(( $+commands[zsh-patina] )) && znap eval zsh-patina 'zsh-patina activate'
+# cargo install --locked navi
+(( $+commands[navi] )) && znap eval navi 'navi widget zsh'
+bindkey ^_ _navi_widget
 
 ## Input
 export EDITOR=nvim
@@ -49,11 +55,9 @@ bindkey -M menuselect  '^[[D' .backward-char  '^[OD' .backward-char
 bindkey -M menuselect  '^[[C'  .forward-char  '^[OC'  .forward-char
 # Ctrl+space to accept zsh-autosuggestion
 bindkey "^ " autosuggest-accept
-# FIXME - <C-j> and <C-k> to select suggestions. Doesn't really work for some reason.
-for mode in main viins vicmd viopp visual isearch menuselect command; do
-  bindkey -M $mode '^j' down-line-or-select
-  bindkey -M $mode '^k' up-line-or-history
-done
+# Use <C-j> and <C-k> to navigate completion menus.
+bindkey -M menuselect '^j' menu-complete
+bindkey -M menuselect '^k' reverse-menu-complete
 # Change cursor shape for normal mode.
 zle-keymap-select() {
   if [[ ${KEYMAP} == vicmd ]] || [[ ${KEYMAP} == vitag ]]; then
@@ -65,6 +69,8 @@ zle-keymap-select() {
 zle -N zle-keymap-select
 _fix_cursor() { echo -ne '\e[5 q' }
 precmd_functions+=(_fix_cursor)
+# Reclaim <C-s> and <C-q>
+[[ -t 1 ]] && stty -ixon
 
 # Power <Tab> with tv for certain commands
 TV_SMART_COMMANDS=( cd )
@@ -140,18 +146,7 @@ setopt hist_verify            # show history expansion before running
 # cd history tab completion
 setopt auto_pushd                  # pushes the old directory onto the stack
 setopt pushd_minus                 # exchange the meanings of '+' and '-'
-zstyle ':completion:*:directory-stack' list-colors '=(#b) #([0-9]#)*( *)==95=38;5;12'
 
-## Completion (should mostly be handled by zsh-autocomplete)
-zstyle ':autocomplete:*' ignored-input '#*'
-zstyle ':completion:*' use-cache yes
-zstyle ':completion:*' cache-path "${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zcompcache"
-# Fuzzy-match
-zstyle ':completion:*' matcher-list 'm:{a-z}={A-Z}' 'r:|[._-]=* r:|=*' 'l:|=* r:|=*'
-# Include hidden files in completion
-_comp_options+=(globdots)
-# Exclude . and ..
-zstyle ':completion:*' special-dirs false
 
 ## WSL config
 if [[ -n $WSL_DISTRO_NAME || $(uname -r) == *microsoft* ]]; then
@@ -159,10 +154,38 @@ if [[ -n $WSL_DISTRO_NAME || $(uname -r) == *microsoft* ]]; then
   [[ $PWD == /mnt/c/* ]] && cd ~
 fi
 export PATH
+# fix NTFS directory colors being unreadable in ls
+[[ -f ~/.dircolors ]] && znap eval dircolors_fix "dircolors -b ~/.dircolors"
+
+## Completion (Modern Styling)
+zstyle ':autocomplete:*' ignored-input '#*'
+zstyle ':autocomplete:*' list-lines 10
+zstyle ':autocomplete:*' delay 0.1
+zstyle ':autocomplete:*' min-input 1
+
+zstyle ':completion:*' use-cache yes
+zstyle ':completion:*' cache-path "${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zcompcache"
+
+# Group completions and style descriptions
+zstyle ':completion:*' group-name ''
+zstyle ':completion:*:descriptions' format '%F{blue}-- %d --%f'
+zstyle ':completion:*:messages' format '%F{purple}-- %d --%f'
+zstyle ':completion:*:warnings' format '%F{red}-- no matches found --%f'
+zstyle ':completion:*:corrections' format '%F{yellow}!- %d (errors: %e) -!%f'
+
+# Modern menu selection highlighting
+zstyle ':completion:*' menu select
+# Use the current LS_COLORS and a purple highlight (ma) for the selection
+zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}" "ma=48;5;61;1"
+
+# Fuzzy-match
+zstyle ':completion:*' matcher-list 'm:{a-z}={A-Z}' 'r:|[._-]=* r:|=*' 'l:|=* r:|=*'
+# Include hidden files in completion
+_comp_options+=(globdots)
+# Exclude . and ..
+zstyle ':completion:*' special-dirs false
 
 export COLORTERM=truecolor
-# fix NTFS directory colors being unreadable in ls
-[[ -f ~/.dircolors ]] && eval $(dircolors -b ~/.dircolors)
 
 
 [[ -f ~/.work-config ]] && source ~/.work-config
@@ -191,7 +214,7 @@ _tv_shell_history() {
 }
 zle -N tv-shell-history _tv_shell_history
 
-zsh-defer znap source zdharma-continuum/fast-syntax-highlighting
+#zsh-defer znap source zdharma-continuum/fast-syntax-highlighting
 #zsh-defer znap source zsh-users/zsh-history-substring-search
 # Up and down search through substring history
 # bindkey '^[[A' history-substring-search-up
