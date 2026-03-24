@@ -5,7 +5,7 @@ style:
   tag:
     color: cyan # text color. possible values: https://bit.ly/3gloNNI
     width_percentage: 15 # column width relative to the terminal window
-    min_width: 15 # minimum column width as number of characters
+    min_width: 10 # minimum column width as number of characters
   comment:
     color: blue
     width_percentage: 40
@@ -15,8 +15,8 @@ style:
 
 finder:
   command: fzf # equivalent to the --finder option
-  overrides: --height=30%
-  overrides_var: --height=10
+  overrides: --height=25% --height=~25
+  overrides_var: --height=15
 
 cheats:
   paths:

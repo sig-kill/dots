@@ -75,7 +75,7 @@ return {
       },
       { "<leader>p", function() Snacks.picker.commands() end,            desc = "Commands" },
       { "gr",        function() Snacks.picker.lsp_references() end,      desc = "Find references" },
-      { "gd",        function() Snacks.picker.lsp_definition() end,      desc = "Go to definition" },
+      { "gd",        function() Snacks.picker.lsp_definitions() end,      desc = "Go to definition" },
       { "gD",        function() Snacks.picker.lsp_declarations() end,    desc = "Go to declaration" },
       { "gI",        function() Snacks.picker.lsp_implementations() end, desc = "Go to implementation" },
       { "<leader>s", function() Snacks.picker.lsp_symbols() end,         desc = "LSP symbols" },
