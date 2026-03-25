@@ -157,11 +157,12 @@ export PATH
 # fix NTFS directory colors being unreadable in ls
 [[ -f ~/.dircolors ]] && znap eval dircolors_fix "dircolors -b ~/.dircolors"
 
-## Completion (Modern Styling)
+## Completion
 zstyle ':autocomplete:*' ignored-input '#*'
 zstyle ':autocomplete:*' list-lines 10
 zstyle ':autocomplete:*' delay 0.1
 zstyle ':autocomplete:*' min-input 1
+zstyle ':autocomplete:*' add-semicolon no
 
 zstyle ':completion:*' use-cache yes
 zstyle ':completion:*' cache-path "${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zcompcache"
