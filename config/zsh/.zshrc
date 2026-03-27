@@ -44,8 +44,11 @@ bindkey ^_ _navi_widget
 
 ## Input
 export EDITOR=nvim
-bindkey "^[[1;5C" forward-word
-bindkey "^[[1;5D" backward-word
+bindkey '^[[3~'   delete-char # <Del>
+bindkey "^[[1;5C" forward-word # <C-right>
+bindkey "^[[1;5D" backward-word # <C-left>
+bindkey  "^[[H"   beginning-of-line # <Home>
+bindkey  "^[[F"   end-of-line # <End>
 # 'jk' to enter normal mode, with 150ms delay (default 400ms).
 export KEYTIMEOUT=15
 bindkey -r -M viins "^["
@@ -159,7 +162,8 @@ export PATH
 
 ## Completion
 zstyle ':autocomplete:*' ignored-input '#*'
-zstyle ':autocomplete:*' list-lines 10
+zstyle ':autocomplete:*' list-lines 20
+zstyle ':autocomplete:history-search:*' list-lines 20
 zstyle ':autocomplete:*' delay 0.1
 zstyle ':autocomplete:*' min-input 1
 zstyle ':autocomplete:*' add-semicolon no
@@ -194,22 +198,24 @@ export COLORTERM=truecolor
 
 znap eval tv-init "tv init zsh"
 
-# Override tv-shell-history to include timestamps
+# Override tv-shell-history to include timestamps and prevent auto-execution
 _tv_shell_history() {
     emulate -L zsh
     zle -I
     _disable_bracketed_paste
     local current_prompt=$LBUFFER
-    output=$(awk -F': |:0;' '{ if ($2 != "") { printf "[%s]%s\n", strftime("%Y-%m-%d %H:%M:%S", $2), $3 } }' ${HISTFILE:-${HOME}/.zsh_history} | \
-             sed '1!G;h;$!d' | \
-             tv --no-status-bar --input "$current_prompt" \
+    # Use tac for fast reversal and tv --no-sort to prioritize recency
+    # Strip trailing newlines with sed to prevent accidental execution
+    output=$(awk -F": |:0;" "{ if (\$2 != \"\") { printf \"[%s]%s\n\", strftime(\"%Y-%m-%d %H:%M:%S\", \$2), \$3 } }" ${HISTFILE:-${HOME}/.zsh_history} | \
+             tac | \
+             tv --no-status-bar --no-sort --input "$current_prompt" \
                 --height 25 \
                 --source-display="{split:]:0}] {split:]:1..}" \
-                --source-output="{split:]:2}")
+                --source-output="{split:]:2}" | sed 's/\n//g')
     zle reset-prompt
     if [[ -n $output ]]; then
         RBUFFER=""
-        LBUFFER=$(echo "$output")
+        LBUFFER=$(echo -n "$output")
     fi
     _enable_bracketed_paste
 }
