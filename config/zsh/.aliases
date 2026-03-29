@@ -12,11 +12,8 @@ chezmoi () {
 }
 alias ls='eza'
 alias cat='bat'
-alias bat='batcat'
-alias fd='fdfind'
 alias j='fasd_cd -d'
 alias tmux='tmx2 new-session -A -s main'
-alias so='source ~/.zshrc'
 alias l='ls -alF --color-scale --icons --group-directories-first'
 alias :q='exit'
 alias please='sudo $(fc -ln -1)'
