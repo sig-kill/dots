@@ -10,7 +10,7 @@ vim.opt.updatetime = 300
 vim.opt.backup = false
 vim.opt.number = true
 vim.opt.swapfile = false
-vim.opt.undodir = vim.fn.stdpath('config') .. "nvim/undo"
+vim.opt.undodir = vim.fn.stdpath('config') .. "/undo"
 vim.opt.undofile = true
 
 vim.opt.conceallevel = 0
@@ -25,7 +25,7 @@ vim.opt.hlsearch = true
 vim.opt.expandtab = true
 vim.opt.tabstop = 2
 vim.opt.shiftwidth = 2
-vim.opt.textwidth = 80
+vim.opt.textwidth = 0
 vim.opt.termguicolors = true
 vim.g.guibg = NONE
 
@@ -66,4 +66,5 @@ keyset('n', '<leader>w', ":CellularAutomaton make_it_rain<CR>",
   "Why Can't I Hold All This Code")
 keyset("n", "gt", ":bnext<CR>", "Next buffer")
 keyset("n", "gT", ":bprevious<CR>", "Previous buffer")
+keyset("n", ":w!!", ":SudaWrite", "Force-write")
 keyset("n", "<leader>rr", reload_config, "Reload nvim config")

@@ -31,8 +31,7 @@ znap source romkatv/zsh-defer
 znap source romkatv/powerlevel10k powerlevel10k.zsh-theme
 znap source TunaCuma/zsh-vi-man
 znap source marlonrichert/zsh-autocomplete
-ZSH_AUTOSUGGEST_STRATEGY=(history)
-znap source zsh-users/zsh-autosuggestions
+# znap source zsh-users/zsh-autosuggestions
 export ZSH_AI_PROVIDER="gemini"
 zsh-defer znap source matheusml/zsh-ai
 
@@ -44,11 +43,15 @@ bindkey ^_ _navi_widget
 
 ## Input
 export EDITOR=nvim
+# consider '/' a wordbreak
+export WORDCHARS=${WORDCHARS//[\/]}
 bindkey '^[[3~'   delete-char # <Del>
-bindkey "^[[1;5C" forward-word # <C-right>
-bindkey "^[[1;5D" backward-word # <C-left>
-bindkey  "^[[H"   beginning-of-line # <Home>
-bindkey  "^[[F"   end-of-line # <End>
+for m (main menuselect); do
+  bindkey -M $m "^[[1;5C" forward-word # <C-right>
+  bindkey -M $m "^[[1;5D" backward-word # <C-left>
+  bindkey -M $m "^[[H"    beginning-of-line # <Home>
+  bindkey -M $m "^[[F"    end-of-line # <End>
+done
 # 'jk' to enter normal mode, with 150ms delay (default 400ms).
 export KEYTIMEOUT=15
 bindkey -r -M viins "^["
@@ -102,8 +105,8 @@ function show-current-mode() {
   zle -M "Mode: $KEYMAP | zle_state: $ZLE_STATE"
 }
 zle -N show-current-mode
-for mode in main viins vicmd viopp visual isearch menuselect command; do
-  bindkey -M $mode '^g' show-current-mode
+for m (main viins vicmd viopp visual isearch menuselect command); do
+  bindkey -M $m '^g' show-current-mode
 done
 
 ## Prompt
@@ -184,7 +187,7 @@ zstyle ':completion:*' menu select
 zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}" "ma=48;5;61;1"
 
 # Fuzzy-match
-zstyle ':completion:*' matcher-list 'm:{a-z}={A-Z}' 'r:|[._-]=* r:|=*' 'l:|=* r:|=*'
+zstyle ':completion:*' matcher-list 'm:{a-z}={A-Z}' 'r:|[._-]=* r:|=*'
 # Include hidden files in completion
 _comp_options+=(globdots)
 # Exclude . and ..

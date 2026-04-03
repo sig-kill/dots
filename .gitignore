@@ -1,8 +1,9 @@
 Session.vim
-config/tv/.config/television/cable/*
-config/nvim/.config/nvim/lazy-lock.json
-config/nvim/.config/nvim/sessions/*
-config/nvim/.config/nvim/lua/lsp/cider.lua
-config/navi/.config/navi/work-cheats/*
 config/navi/.config/navi/navi.log
-
+config/navi/.config/navi/work-cheats/*
+config/nvim/.config/nvim/lazy-lock.json
+config/nvim/.config/nvim/lua/lsp/cider.lua
+config/nvim/.config/nvim/sessions/*
+config/nvim/.config/nvim/undo/
+config/somewm/.config/somewm/.persist_windows
+config/tv/.config/television/cable/*

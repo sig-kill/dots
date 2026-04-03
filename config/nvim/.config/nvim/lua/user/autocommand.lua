@@ -54,3 +54,13 @@ autocmd("VimResized", {
   group = general,
   desc = "Equalize splits on resize",
 })
+
+autocmd({ "BufEnter", "WinEnter" }, {
+  callback = function()
+    if vim.bo.buftype == "" then
+      vim.fn.matchadd("ColorColumn", [[\%81v.]])
+    end
+  end,
+  group = general,
+  desc = "Highlight column 81 only if it exists",
+})
