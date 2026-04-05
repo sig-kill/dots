@@ -20,7 +20,6 @@ local assign_tag = function(matcher, screen_role, tag_name)
   }
 end
 
-
 ruled.client.connect_signal("request::rules", function()
   ruled.client.append_rule {
     id         = "global",
@@ -61,20 +60,6 @@ ruled.client.connect_signal("request::rules", function()
       instance = { "wine", "foobar2000.exe" }
     },
     properties = { titlebars_enabled = true }
-  }
-
-  ruled.client.append_rule {
-    rule = {
-      class = {
-        "steam_app_883710" -- Resident Evil 2R
-      }
-    },
-    properties = {
-      floating = true,
-      placement = awful.placement.centered,
-      -- Ensure it maps correctly if launching from a background script
-      focus = awful.client.focus.filter
-    }
   }
 
   assign_tag("Plex", "left", "plex")

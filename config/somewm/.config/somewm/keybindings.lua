@@ -12,11 +12,11 @@ require("awful.hotkeys_popup.keys")
 --------------------
 
 -- 1, 2, 3, 4, 5: Left, Middle, Right, Scroll up, Scroll down
-awful.mouse.append_global_mousebindings({
-  awful.button({}, 3, function() mymainmenu:toggle() end),
-  awful.button({}, 4, awful.tag.viewnext),
-  awful.button({}, 5, awful.tag.viewprev),
-})
+--awful.mouse.append_global_mousebindings({
+--  awful.button({}, 3, function() mymainmenu:toggle() end),
+--  awful.button({}, 4, awful.tag.viewnext),
+--  awful.button({}, 5, awful.tag.viewprev),
+--})
 client.connect_signal("request::default_mousebindings", function()
   awful.mouse.append_client_mousebindings({
     -- Left click to focus
@@ -36,8 +36,25 @@ client.connect_signal("request::default_mousebindings", function()
   })
 end)
 
+local ruled = require("ruled")
+
 -- Sloppy focus (application focus follows mouse)
 client.connect_signal("mouse::enter", function(c)
+  local class = c.class or ""
+  local instance = c.instance or ""
+
+  -- Exclude all Steam windows (case-insensitive)
+  if class:lower():find("^steam") or instance:lower():find("^steam") then
+    return
+  end
+
+  local excluded = {
+    -- { name = "", class = "" },
+  }
+  for _, rule in ipairs(excluded) do
+    if ruled.client.match(c, rule) then return end
+  end
+
   c:activate { context = "mouse_enter", raise = false }
 end)
 
@@ -65,12 +82,14 @@ local globalkeys = {
   -- { mod, key, description, callback }
   { "awesome",
     { { modkey },          "/",     "show help",     hotkeys_popup.show_help },
-    { { modkey, "Shift" }, "/",     "debug",         require('functions').save_open_windows},
+    { { modkey, "Shift" }, "/",     "debug",         require('functions').save_open_windows },
     { { modkey, "Shift" }, "r",     "reload config", awesome.restart },
     { { modkey, "Shift" }, "q",     "quit",          awesome.quit },
     { { modkey },          "Space", "next layout",   function() awful.layout.inc(1) end },
     { { modkey, "Shift" }, "Space", "prev layout",   function() awful.layout.inc(-1) end },
     { { modkey },          "w",     "lock screen",   function() awful.spawn.single_instance('hyprlock') end },
+    { { "Control", "Shift" }, "x", "screenshot",
+      function() awful.spawn.with_shell('grim -g "$(slurp)" - | swappy -f -') end },
   },
   { "launcher",
     { { modkey },          "Return", "open terminal", function() awful.spawn(terminal) end },

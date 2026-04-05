@@ -6,6 +6,9 @@ pcall(require, "luarocks.loader")
 -- Standard awesome library
 local awful = require("awful")
 require("awful.autofocus")
+
+awful.spawn.single_instance('kanshi')
+
 local gears = require("gears")
 -- Widget and layout library
 local wibox = require("wibox")
@@ -17,8 +20,6 @@ local hotkeys_popup = require("awful.hotkeys_popup")
 -- when client with a matching name is opened:
 require("awful.hotkeys_popup.keys")
 local functions = require("functions")
-
-awful.spawn.single_instance("kanshi")
 
 beautiful.init(os.getenv("HOME") .. "/.config/somewm/theme.lua")
 -- Initialize lockscreen (must be after beautiful.init)

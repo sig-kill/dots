@@ -30,8 +30,8 @@ source ~/.config/znap/znap/znap.zsh
 znap source romkatv/zsh-defer
 znap source romkatv/powerlevel10k powerlevel10k.zsh-theme
 znap source TunaCuma/zsh-vi-man
-znap source marlonrichert/zsh-autocomplete
-# znap source zsh-users/zsh-autosuggestions
+#znap source marlonrichert/zsh-autocomplete
+znap source zsh-users/zsh-autosuggestions
 export ZSH_AI_PROVIDER="gemini"
 zsh-defer znap source matheusml/zsh-ai
 
