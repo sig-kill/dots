@@ -55,9 +55,7 @@ ruled.client.connect_signal("request::rules", function()
   ruled.client.append_rule {
     id         = "titlebars",
     rule_any   = {
-      type     = { "dialog" },
       class    = { "Wine", "wine" },
-      instance = { "wine", "foobar2000.exe" }
     },
     properties = { titlebars_enabled = true }
   }
