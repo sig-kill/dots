@@ -1,4 +1,4 @@
 % git
 
 # Creat empty commit (for dotfiles)
-git commit --allow-empty-message -m ''
+git commit --allow-empty-message -m '' --all

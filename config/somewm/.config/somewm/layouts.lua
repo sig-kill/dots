@@ -49,10 +49,17 @@ layouts.default_tags = function(s)
       s, awful.layout.layouts[2]
     )
   elseif s.output == displays["bottom"] then
-    awful.tag(
-      { "minimeters", "metropolis", "3", "4", "5", "6", "7", "8", "9" },
-      s, layouts_list[1]
-    )
+    awful.tag.add("minimeters", {
+      layout = layouts_list[3],
+      screen = s,
+      selected = true,
+    })
+    for tagname = 2, 9 do
+      awful.tag.add(tostring(tagname), {
+        layout = layouts_list[1],
+        screen = s,
+      })
+    end
   end
 end
 

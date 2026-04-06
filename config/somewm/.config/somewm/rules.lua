@@ -20,6 +20,28 @@ local assign_tag = function(matcher, screen_role, tag_name)
   }
 end
 
+local minimeters_window = function(meter_name, geometry)
+  ruled.client.append_rule {
+    rule = {
+      class = "app.minimeters.MiniMeters",
+      name = meter_name
+    },
+    -- callback = function(c)
+    --   c:geometry(geometry)
+    -- end,
+    properties = {
+      screen   = displays["bottom"].screen,
+      tag      = "minimeters",
+      urgent   = false,
+      floating = true,
+      x        = geometry.x,
+      y        = geometry.y,
+      width    = geometry.width,
+      height   = geometry.height,
+    }
+  }
+end
+
 ruled.client.connect_signal("request::rules", function()
   ruled.client.append_rule {
     id         = "global",
@@ -55,7 +77,7 @@ ruled.client.connect_signal("request::rules", function()
   ruled.client.append_rule {
     id         = "titlebars",
     rule_any   = {
-      class    = { "Wine", "wine" },
+      class = { "Wine", "wine" },
     },
     properties = { titlebars_enabled = true }
   }
@@ -65,10 +87,33 @@ ruled.client.connect_signal("request::rules", function()
   assign_tag("firefox", "middle", "browser")
   assign_tag("Carla2", "middle", "carla")
   assign_tag("discord", "right", "discord")
-  assign_tag("app.minimeters.MiniMeters", "bottom", "minimeters")
-  assign_tag({ name = "metropolis", class = "com.mitchellh.ghostty" },
-    "bottom", "metropolis")
-  functions.restore_windows()
+
+  minimeters_window("MiniMeters", {
+    x = 3995,
+    y = 1687,
+    width = 827,
+    height = 245
+  })
+  minimeters_window("Stereometer", {
+    x = 4461,
+    y = 1440,
+    width = 361,
+    height = 247
+  })
+  minimeters_window("Waveform", {
+    x = 3992,
+    y = 1440,
+    width = 467,
+    height = 245
+  })
+  minimeters_window("Spectrogram", {
+    x = 4824,
+    y = 1443,
+    width = 294,
+    height = 490
+  })
+
+  --functions.restore_windows()
 end)
 
 -- Add a titlebar if titlebars_enabled is set to true in the rules.
@@ -108,8 +153,6 @@ client.connect_signal("request::titlebars", function(c)
     layout = wibox.layout.align.horizontal
   }
 end)
--- }}}
-
 
 -------------------
 -- Notifications --
