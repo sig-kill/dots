@@ -30,7 +30,7 @@ source ~/.config/znap/znap/znap.zsh
 znap source romkatv/zsh-defer
 znap source romkatv/powerlevel10k powerlevel10k.zsh-theme
 znap source TunaCuma/zsh-vi-man
-#znap source marlonrichert/zsh-autocomplete
+znap source marlonrichert/zsh-autocomplete
 znap source zsh-users/zsh-autosuggestions
 export ZSH_AI_PROVIDER="gemini"
 zsh-defer znap source matheusml/zsh-ai
@@ -175,11 +175,11 @@ zstyle ':completion:*' use-cache yes
 zstyle ':completion:*' cache-path "${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zcompcache"
 
 # Group completions and style descriptions
-zstyle ':completion:*' group-name ''
-zstyle ':completion:*:descriptions' format '%F{blue}-- %d --%f'
-zstyle ':completion:*:messages' format '%F{purple}-- %d --%f'
-zstyle ':completion:*:warnings' format '%F{red}-- no matches found --%f'
-zstyle ':completion:*:corrections' format '%F{yellow}!- %d (errors: %e) -!%f'
+# zstyle ':completion:*' group-name ''
+# zstyle ':completion:*:descriptions' format '%F{blue}-- %d --%f'
+# zstyle ':completion:*:messages' format '%F{purple}-- %d --%f'
+# zstyle ':completion:*:warnings' format '%F{red}-- no matches found --%f'
+# zstyle ':completion:*:corrections' format '%F{yellow}!- %d (errors: %e) -!%f'
 
 # Modern menu selection highlighting
 zstyle ':completion:*' menu select

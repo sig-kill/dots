@@ -1,5 +1,6 @@
 local awful = require("awful")
 awful.spawn.with_shell("pkill carla; carla ~/.config/carla/default.carxp")
+awful.spawn.with_shell("pkill wlsunset; wlsunset -l 37.7 -L -121.4 -t 3500")
 awful.spawn.with_shell("zsh-patina restart")
 awful.spawn.single_instance("firefox-developer-edition")
 awful.spawn.single_instance("steam")

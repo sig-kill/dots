@@ -60,7 +60,8 @@ ruled.client.connect_signal("request::rules", function()
       instance = { "copyq", "pinentry" },
       class    = {
         "Arandr", "Blueman-manager", "Gpick", "Kruler", "Sxiv",
-        "Tor Browser", "Wpa_gui", "veromix", "xtightvncviewer"
+        "Tor Browser", "Wpa_gui", "veromix", "xtightvncviewer",
+        "org.kde.dolphin", "faugus-launcher",
       },
       name     = {
         "Event Tester", -- xev.
