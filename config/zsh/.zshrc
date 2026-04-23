@@ -51,6 +51,8 @@ for m (main menuselect); do
   bindkey -M $m "^[[1;5D" backward-word # <C-left>
   bindkey -M $m "^[[H"    beginning-of-line # <Home>
   bindkey -M $m "^[[F"    end-of-line # <End>
+  bindkey -M $m "^[[1~"   beginning-of-line # <Home> (tmux)
+  bindkey -M $m "^[[4~"   end-of-line # <End> (tmux)
 done
 # 'jk' to enter normal mode, with 150ms delay (default 400ms).
 export KEYTIMEOUT=15
