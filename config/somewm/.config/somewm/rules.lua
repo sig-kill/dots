@@ -1,5 +1,6 @@
 -- Notification library
 local naughty = require("naughty")
+local gears = require("gears")
 local awful = require("awful")
 local wibox = require("wibox")
 -- Declarative object management
@@ -20,12 +21,9 @@ local assign_tag = function(matcher, screen_role, tag_name)
   }
 end
 
-local minimeters_window = function(meter_name, geometry)
+local window_geometry = function(window_rule, geometry)
   ruled.client.append_rule {
-    rule = {
-      class = "app.minimeters.MiniMeters",
-      name = meter_name
-    },
+    rule = window_rule,
     -- callback = function(c)
     --   c:geometry(geometry)
     -- end,
@@ -61,7 +59,7 @@ ruled.client.connect_signal("request::rules", function()
       class    = {
         "Arandr", "Blueman-manager", "Gpick", "Kruler", "Sxiv",
         "Tor Browser", "Wpa_gui", "veromix", "xtightvncviewer",
-        "org.kde.dolphin", "faugus-launcher",
+        "org.kde.dolphin", "faugus-launcher", "xdg-desktop-portal-gtk"
       },
       name     = {
         "Event Tester", -- xev.
@@ -86,32 +84,47 @@ ruled.client.connect_signal("request::rules", function()
   assign_tag("Plex", "left", "plex")
   assign_tag("steam", "middle", "steam")
   assign_tag("firefox", "middle", "browser")
-  assign_tag("Carla2", "middle", "carla")
+  assign_tag("carla", "middle", "carla")
   assign_tag("discord", "right", "discord")
 
-  minimeters_window("MiniMeters", {
+  local minimeters = function(meter_name)
+    return {
+      class = "app.minimeters.MiniMeters",
+      name = meter_name
+    }
+  end
+  window_geometry(minimeters("MiniMeters"), {
     x = 3995,
     y = 1687,
     width = 827,
     height = 245
   })
-  minimeters_window("Stereometer", {
+  window_geometry(minimeters("Stereometer"), {
     x = 4461,
     y = 1440,
     width = 361,
     height = 247
   })
-  minimeters_window("Waveform", {
+  window_geometry(minimeters("Waveform"), {
     x = 3992,
     y = 1440,
     width = 467,
     height = 245
   })
-  minimeters_window("Spectrogram", {
+  window_geometry(minimeters("Spectrogram"), {
     x = 4824,
     y = 1443,
     width = 294,
     height = 490
+  })
+  window_geometry({
+    class = "Rolling Sampler",
+    instance = "Rolling Sampler"
+  }, {
+    x = 3200,
+    y = 1440,
+    width = 787,
+    height = 247
   })
 
   --functions.restore_windows()
