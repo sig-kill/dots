@@ -85,7 +85,8 @@ ruled.client.connect_signal("request::rules", function()
   assign_tag("steam", "middle", "steam")
   assign_tag("firefox", "middle", "browser")
   assign_tag("carla", "middle", "carla")
-  assign_tag("discord", "right", "discord")
+  assign_tag("vesktop", "right", "discord")
+  assign_tag("fooyin", "left", "music")
 
   local minimeters = function(meter_name)
     return {
@@ -220,19 +221,6 @@ end)
 
 naughty.connect_signal("request::display", function(n)
   naughty.layout.box { notification = n }
-end)
-
-client.connect_signal("manage", function(c)
-  naughty.notify {
-    title = "New window",
-    text = string.format(
-      "class: %s\ninstance: %s\nname: %s\ntype: %s",
-      c.class or "nil",
-      c.instance or "nil",
-      c.name or "nil",
-      c.type or "nil"
-    ),
-  }
 end)
 
 awesome.connect_signal("exit", function(reason_restart)

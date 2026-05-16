@@ -40,7 +40,7 @@ return {
         sources = {
           explorer = {
             hidden = true,
-            exclude = {'*.orig'},
+            exclude = { '*.orig' },
           },
         },
         win = {
@@ -61,9 +61,17 @@ return {
       rename = { enabled = true },
     },
     keys = {
-      { "<leader>/",   function() Snacks.picker.grep() end,      desc = "Grep" },
-      { "<C-p>",       function() Snacks.picker.smart() end,     desc = "Smart Find Files" },
-      { ":E ",         function() Snacks.picker.files() end,     desc = "Find Files" },
+      { "<leader>/", function() Snacks.picker.grep() end,  desc = "Grep" },
+      { "<C-p>",     function() Snacks.picker.smart() end, desc = "Smart Find Files" },
+      {
+        ":E ",
+        function()
+          Snacks.picker.files({
+            exclude = "GoogleDrive"
+          })
+        end,
+        desc = "Find Files"
+      },
       { ":b",          function() Snacks.picker.buffers() end,   desc = "Buffers" },
       { ":B ",         function() Snacks.picker.buffers() end,   desc = "Buffers" },
       { ":reg<Enter>", function() Snacks.picker.registers() end, desc = "Registers" },
@@ -75,7 +83,7 @@ return {
       },
       { "<leader>p", function() Snacks.picker.commands() end,            desc = "Commands" },
       { "gr",        function() Snacks.picker.lsp_references() end,      desc = "Find references" },
-      { "gd",        function() Snacks.picker.lsp_definitions() end,      desc = "Go to definition" },
+      { "gd",        function() Snacks.picker.lsp_definitions() end,     desc = "Go to definition" },
       { "gD",        function() Snacks.picker.lsp_declarations() end,    desc = "Go to declaration" },
       { "gI",        function() Snacks.picker.lsp_implementations() end, desc = "Go to implementation" },
       { "<leader>s", function() Snacks.picker.lsp_symbols() end,         desc = "LSP symbols" },

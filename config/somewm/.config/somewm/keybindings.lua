@@ -44,9 +44,9 @@ client.connect_signal("mouse::enter", function(c)
   local instance = c.instance or ""
 
   -- Exclude all Steam windows (case-insensitive)
-  if class:lower():find("^steam") or instance:lower():find("^steam") then
-    return
-  end
+  -- if class:lower():find("^steam") or instance:lower():find("^steam") then
+  --   return
+  -- end
 
   local excluded = {
     -- { name = "", class = "" },

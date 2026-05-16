@@ -67,7 +67,7 @@ local separator = wibox.widget.textbox(" | ")
 
 local music_player_widget = wibox.widget.textbox()
 awful.spawn.with_line_callback(
-  "playerctl --follow metadata --format '<{{status}}> {{artist}} - {{title}}'",
+  "playerctl -p fooyin --follow metadata --format '<{{status}}> {{artist}} - {{title}}'",
   {
     stdout = function(line)
       music_player_widget:set_text(line:gsub('<Playing>', ''):gsub('<.+>', ''))
@@ -76,7 +76,7 @@ awful.spawn.with_line_callback(
 )
 music_player_widget:buttons(gears.table.join(
   awful.button({}, 1, function()
-    awful.spawn.with_shell("playerctl --player=fooyin,%any play-pause || pgrep -x fooyin > /dev/null || fooyin")
+    awful.spawn.with_shell("fooyin -t")
   end)))
 
 local time_widget = wibox.widget.textclock("%a, %b %d %I:%M:%S", 1)
