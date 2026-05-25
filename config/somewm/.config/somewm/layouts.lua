@@ -40,7 +40,7 @@ layouts.default_tags = function(s)
       })
     end
     awful.tag.add("carla", {
-      layout = layouts_list[1],
+      layout = layouts_list[3],
       screen = s,
     })
   elseif s.output == displays["right"] then

@@ -85,6 +85,7 @@ ruled.client.connect_signal("request::rules", function()
   assign_tag("steam", "middle", "steam")
   assign_tag("firefox", "middle", "browser")
   assign_tag("carla", "middle", "carla")
+  assign_tag("raysession", "middle", "carla")
   assign_tag("vesktop", "right", "discord")
   assign_tag("fooyin", "left", "music")
 
