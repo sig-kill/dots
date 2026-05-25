@@ -232,7 +232,3 @@ zle -N tv-shell-history _tv_shell_history
 #bindkey '^[[B' history-substring-search-down
 
 # zprof
-
-
-# Added by Antigravity CLI installer
-export PATH="/home/edward/.local/bin:$PATH"
