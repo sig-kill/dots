@@ -31,7 +31,16 @@ client.connect_signal("request::default_mousebindings", function()
 
     -- Mod4 + Right click to resize
     awful.button({ modkey }, 3, function(c)
-      c:activate({ context = "mouse_click", action = "mouse_resize" })
+      c:activate({ context = "mouse_click" })
+
+      local t = c.screen and c.screen.selected_tag
+      local l = t and t.layout
+      if not c.floating and l and l.mouse_resize_handler then
+        local cur = mouse.coords()
+        l.mouse_resize_handler(c, nil, cur.x, cur.y)
+      else
+        awful.mouse.client.resize(c)
+      end
     end),
   })
 end)

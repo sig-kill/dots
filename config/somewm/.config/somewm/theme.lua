@@ -38,7 +38,7 @@ theme.wibar_height             = dpi(20)
 --theme.menu_width          = dpi(300)
 -- Layouts
 --theme.layout_machi          = machi.get_icon()
---theme.layout_centerwork     = gears.filesystem.get_dir('config') .. '/bling/icons/layouts/centered.png'
+theme.layout_centerwork        = os.getenv("HOME") .. "/.config/somewm/theme/icons/layouts/centerwork.svg"
 -- local recolor             = gears.color.recolor_image
 -- theme.layout_tile         = recolor(themes_path .. "default/layouts/tilew.png", "#D7D7D7"
 

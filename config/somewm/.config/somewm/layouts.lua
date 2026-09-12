@@ -2,6 +2,11 @@
 -- local lain = require("lain")
 local awful = require("awful")
 local profile = require("profile")
+local centerwork = require("layout_centerwork")
+
+-- Disable jumping cursor to corner on resize
+awful.layout.suit.tile.resize_jump_to_corner = false
+awful.layout.suit.floating.resize_jump_to_corner = false
 
 -- Table of layouts to cover with awful.layout.inc, order matters.
 local layouts = {}
@@ -14,14 +19,16 @@ end
 local layouts_list = {
   change_layout_name(awful.layout.suit.tile, "vsplit"),
   change_layout_name(awful.layout.suit.tile.top, "hsplit"),
-  change_layout_name(awful.layout.suit.floating, "float")
+  change_layout_name(awful.layout.suit.floating, "float"),
+  centerwork,
 }
 layouts.list = layouts_list
 
 local layout_map = {
-  vsplit = layouts_list[1],
-  hsplit = layouts_list[2],
-  float  = layouts_list[3],
+  vsplit     = layouts_list[1],
+  hsplit     = layouts_list[2],
+  float      = layouts_list[3],
+  centerwork = centerwork,
 }
 
 local function apply_tag_list(s, tag_def, fallback_layout)
