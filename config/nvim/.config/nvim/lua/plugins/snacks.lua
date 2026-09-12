@@ -14,7 +14,7 @@ return {
         preset = {
           keys = {
             { icon = " ", key = "e", desc = "Explorer", action = ":lua Snacks.picker.explorer()" },
-            { icon = " ", key = "f", desc = "Find File", action = ":lua Snacks.picker.explorer()" },
+            { icon = " ", key = "f", desc = "Find File", action = ":lua Snacks.picker.files()" },
             { icon = " ", key = "g", desc = "Find Text", action = ":lua Snacks.dashboard.pick('live_grep')" },
             { icon = " ", key = "r", desc = "Recent Files", action = ":lua Snacks.dashboard.pick('oldfiles')" },
             { icon = " ", key = "c", desc = "Config", action = ":lua Snacks.dashboard.pick('files', {cwd = vim.fn.stdpath('config')})" },
@@ -86,7 +86,7 @@ return {
       { "gd",        function() Snacks.picker.lsp_definitions() end,     desc = "Go to definition" },
       { "gD",        function() Snacks.picker.lsp_declarations() end,    desc = "Go to declaration" },
       { "gI",        function() Snacks.picker.lsp_implementations() end, desc = "Go to implementation" },
-      { "<leader>s", function() Snacks.picker.lsp_symbols() end,         desc = "LSP symbols" },
+      { "<leader>ss", function() Snacks.picker.lsp_symbols() end,         desc = "LSP symbols" },
       {
         "<leader>l",
         function() Snacks.picker.explorer({ matcher = { fuzzy = true } }) end,

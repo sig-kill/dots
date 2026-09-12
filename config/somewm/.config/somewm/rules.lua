@@ -10,12 +10,13 @@ local functions = require("functions")
 local assign_tag = function(matcher, screen_role, tag_name)
   local rule = type(matcher) == "table" and matcher
       or { class = matcher }
+  local target_screen = displays[screen_role] and displays[screen_role].screen or nil
   ruled.client.append_rule {
     id         = rule.id or rule.class or rule.name
         or rule.instance or tostring(matcher),
     rule       = rule,
     properties = {
-      screen = displays[screen_role].screen,
+      screen = target_screen,
       tag    = tag_name
     }
   }
@@ -28,7 +29,7 @@ local window_geometry = function(window_rule, geometry)
     --   c:geometry(geometry)
     -- end,
     properties = {
-      screen   = displays["bottom"].screen,
+      screen   = displays["bottom"] and displays["bottom"].screen or nil,
       tag      = "minimeters",
       urgent   = false,
       floating = true,

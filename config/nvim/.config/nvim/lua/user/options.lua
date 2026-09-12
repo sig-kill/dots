@@ -1,6 +1,8 @@
-require('user/util')
-require('user/autocommand')
-require('user/commands')
+vim.g.mapleader = " "
+vim.g.maplocalleader = " "
+require('user.util')
+require('user.autocommand')
+require('user.commands')
 -------------
 -- Options --
 -------------
@@ -10,7 +12,11 @@ vim.opt.updatetime = 300
 vim.opt.backup = false
 vim.opt.number = true
 vim.opt.swapfile = false
-vim.opt.undodir = vim.fn.stdpath('config') .. "/undo"
+local undodir = vim.fn.stdpath('state') .. "/undo"
+if vim.fn.isdirectory(undodir) == 0 then
+  vim.fn.mkdir(undodir, "p")
+end
+vim.opt.undodir = undodir
 vim.opt.undofile = true
 
 vim.opt.conceallevel = 0
@@ -27,7 +33,6 @@ vim.opt.tabstop = 2
 vim.opt.shiftwidth = 2
 vim.opt.textwidth = 0
 vim.opt.termguicolors = true
-vim.g.guibg = NONE
 
 vim.opt.wrap = true
 vim.opt.linebreak = true
@@ -38,8 +43,6 @@ vim.opt.runtimepath:remove("/usr/share/vim/vimfiles")
 -----------------
 -- Keymappings --
 -----------------
-vim.g.mapleader = " "
-
 local keyset = function(mode, lhs, rhs, desc)
   local opts = { noremap = true, silent = true }
   if desc ~= nil then
@@ -57,14 +60,15 @@ keyset("n", "<C-j>", "<C-w>j")
 keyset("n", "<C-k>", "<C-w>k")
 keyset("n", "<C-l>", "<C-w>l")
 keyset("n", "<leader>=", function() vim.lsp.buf.format() end)
-keyset("n", "<C-[>", function() vim.diagnostic.open_float() end)
+keyset("n", "<C-'>", function() vim.diagnostic.open_float() end, "Open diagnostic float")
 keyset("n", "[p", function() vim.diagnostic.jump({ count = -1, float = true }) end, "Jump to previous diagnostic")
 keyset("n", "]p", function() vim.diagnostic.jump({ count = 1, float = true }) end, "Jump to next diagnostic")
 keyset('n', '<leader>s', [[:%s/\<<C-r><C-w>\>/<C-r><C-w>/gI<Left><Left><Left>]],
   'Replace all instances of word')
-keyset('n', '<leader>w', ":CellularAutomaton make_it_rain<CR>",
-  "Why Can't I Hold All This Code")
-keyset("n", "gt", ":bnext<CR>", "Next buffer")
-keyset("n", "gT", ":bprevious<CR>", "Previous buffer")
-keyset("n", ":w!!", ":SudaWrite", "Force-write")
-keyset("n", "<leader>rr", reload_config, "Reload nvim config")
+keyset("n", "<leader>w", "<cmd>w<CR>", "Save file")
+keyset("n", "[b", "<cmd>bprevious<CR>", "Previous buffer")
+keyset("n", "]b", "<cmd>bnext<CR>", "Next buffer")
+keyset("n", "<S-h>", "<cmd>bprevious<CR>", "Previous buffer")
+keyset("n", "<S-l>", "<cmd>bnext<CR>", "Next buffer")
+vim.cmd([[cabbrev <expr> w!! (getcmdtype() == ':' && getcmdline() == 'w!!') ? 'SudaWrite' : 'w!!']])
+keyset("n", "<leader>rr", "<cmd>restart<CR>", "Restart Neovim")

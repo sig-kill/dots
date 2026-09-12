@@ -19,6 +19,8 @@ path=(
   $HOME/.cargo/bin
   $path
 )
+export TERMINFO="$HOME/.terminfo"
+export TERMINFO_DIRS="$HOME/.terminfo:/usr/share/terminfo"
 
 # Plugins
 [[ -r ~/.config/znap/znap/znap.zsh ]] ||

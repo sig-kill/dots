@@ -3,12 +3,11 @@ return {
     'nvim-mini/mini.sessions',
     version = false,
     opts = {
-      autoread = true,
+      autoread = false,
       autowrite = true,
       file = ''
     }
   },
-  { 'nvim-mini/mini.cursorword', opts = { delay = 40 } },
   {
     'nvim-mini/mini.hipatterns',
     opts = function()

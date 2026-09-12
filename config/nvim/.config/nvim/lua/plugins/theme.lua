@@ -17,7 +17,7 @@ return {
     lazy = false,
     dependencies = {
       'nvim-tree/nvim-web-devicons',
-      'SmiteshP/nvim-navic',
+      { 'SmiteshP/nvim-navic', opts = { lsp = { auto_attach = true } } },
       {
         'linrongbin16/lsp-progress.nvim',
         dependencies = { 'nvim-tree/nvim-web-devicons' },
@@ -45,13 +45,20 @@ return {
             end,
             cond = navic.is_available
           } },
-          lualine_z = { { 'require("lsp-progress").progress()' } },
+          lualine_z = {
+            {
+              function()
+                return require("lsp-progress").progress()
+              end,
+            },
+          },
         }
       }
       -- Callbacks to refresh LSP progress
       vim.api.nvim_create_augroup("lualine_augroup", { clear = true })
-      vim.api.nvim_create_autocmd("LspProgress", {
+      vim.api.nvim_create_autocmd("User", {
         group = "lualine_augroup",
+        pattern = "LspProgressStatusUpdated",
         callback = require("lualine").refresh,
       })
     end

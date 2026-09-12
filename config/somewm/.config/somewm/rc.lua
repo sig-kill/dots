@@ -26,7 +26,8 @@ beautiful.init(os.getenv("HOME") .. "/.config/somewm/theme.lua")
 require("lockscreen").init()
 awesome.log_level = "info"
 
-terminal = "ghostty"
+local profile = require("profile")
+terminal = profile.terminal
 editor = os.getenv("EDITOR") or "vim"
 editor_cmd = terminal .. " -e " .. editor
 modkey = "Mod4"
@@ -37,13 +38,24 @@ local display_map = {
   ['24GL600F'] = 'right',
   ['HP X27q'] = 'middle',
   ['Wisecoco'] = 'bottom',
+  ['P2718EC'] = 'left',
+  ['LF32TU87'] = 'middle',
 }
-for o in output do
+
+local function update_displays(o)
   local role = display_map[o.model]
   if role then
     displays[role] = o
   end
 end
+
+for o in output do
+  update_displays(o)
+end
+
+output.connect_signal("added", function(o)
+  update_displays(o)
+end)
 
 -- Menu
 myawesomemenu = {
@@ -76,7 +88,25 @@ end)
 
 -- Wallpaper
 screen.connect_signal("request::wallpaper", function(s)
-  gears.wallpaper.centered(beautiful.wallpaper, s)
+  if beautiful.wallpaper and gears.filesystem.file_readable(beautiful.wallpaper) then
+    awful.wallpaper {
+      screen = s,
+      widget = {
+        {
+          image     = beautiful.wallpaper,
+          upscale   = true,
+          downscale = true,
+          widget    = wibox.widget.imagebox,
+        },
+        valign = "center",
+        halign = "center",
+        tiled  = false,
+        widget = wibox.container.tile,
+      }
+    }
+  else
+    awful.wallpaper { screen = s, bg = beautiful.bg_normal or "#060606" }
+  end
 end)
 
 local widgets = require('widgets')
@@ -134,6 +164,9 @@ require('rules')
 awesome._set_keyboard_setting("numlock", true)
 awful.input.tap_to_click = 1
 awful.input.keyboard_repeat_delay = 450
+if profile.accel_speed then
+  awful.input.accel_speed = profile.accel_speed
+end
 --awful.input.xkb_options = "caps:super"
 
 require('autorun')

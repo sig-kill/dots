@@ -107,10 +107,20 @@ local globalkeys = {
             if not input or #input == 0 then
               naughty.notify { text = "Empty input" }
             else
-              naughty.notify({ text = gears.debug.dump_return(awful.util.eval(input)) })
+              local fn, err = (loadstring or load)(input)
+              if fn then
+                local success, res = pcall(fn)
+                if success then
+                  naughty.notify({ text = gears.debug.dump_return(res) })
+                else
+                  naughty.notify({ text = "Error: " .. tostring(res) })
+                end
+              else
+                naughty.notify({ text = "Compile error: " .. tostring(err) })
+              end
             end
           end,
-          history_path = awful.util.get_cache_dir() .. "/history_eval"
+          history_path = gears.filesystem.get_cache_dir() .. "history_eval"
         }
       end },
   },

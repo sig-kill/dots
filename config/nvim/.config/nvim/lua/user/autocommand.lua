@@ -13,19 +13,9 @@ autocmd("BufReadPost", {
   desc = "Jump to last cursor position on file open",
 })
 
-autocmd("BufReadPost", {
-  callback = function()
-    if vim.fn.line "'\"" > 1 and vim.fn.line "'\"" <= vim.fn.line "$" then
-      vim.cmd 'normal! g`"'
-    end
-  end,
-  group = general,
-  desc = "Jump to last cursor position on file open",
-})
-
 autocmd("TextYankPost", {
   callback = function()
-    vim.hl.on_yank{ higroup = "YankHighlight", timeout = 200 }
+    vim.hl.on_yank({ higroup = "IncSearch", timeout = 200 })
   end,
   group = general,
   desc = "Highlight on yank",
@@ -57,10 +47,24 @@ autocmd("VimResized", {
 
 autocmd({ "BufEnter", "WinEnter" }, {
   callback = function()
-    if vim.bo.buftype == "" then
-      vim.fn.matchadd("ColorColumn", [[\%81v.]])
+    if vim.w.column_match_id then
+      pcall(vim.fn.matchdelete, vim.w.column_match_id)
+      vim.w.column_match_id = nil
+    end
+    if vim.bo.buftype == "" and vim.bo.filetype ~= "" then
+      vim.w.column_match_id = vim.fn.matchadd("ColorColumn", [[\%81v.]])
     end
   end,
   group = general,
   desc = "Highlight column 81 only if it exists",
+})
+
+autocmd({ "BufLeave", "WinLeave" }, {
+  callback = function()
+    if vim.w.column_match_id then
+      pcall(vim.fn.matchdelete, vim.w.column_match_id)
+      vim.w.column_match_id = nil
+    end
+  end,
+  group = general,
 })

@@ -1,6 +1,4 @@
--- Deps: luarocks for lazy.nvim
--- fd ripgrep fzf for telescope
--- sqlite libsqlite3-dev for telescope-frecency
+-- Neovim configuration
 require('user.options')
 
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
