@@ -169,4 +169,9 @@ if profile.accel_speed then
 end
 --awful.input.xkb_options = "caps:super"
 
+-- Turn off monitors after 5 minutes (300s) of inactivity:
+awesome.set_idle_timeout("dpms", 300, function()
+  awesome.dpms_off()
+end)
+
 require('autorun')
