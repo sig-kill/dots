@@ -7,7 +7,8 @@ pcall(require, "luarocks.loader")
 local awful = require("awful")
 require("awful.autofocus")
 
-awful.spawn.single_instance('kanshi')
+local functions = require("functions")
+functions.run_once('kanshi')
 
 local gears = require("gears")
 -- Widget and layout library
@@ -19,7 +20,6 @@ local hotkeys_popup = require("awful.hotkeys_popup")
 -- Enable hotkeys help widget for VIM and other apps
 -- when client with a matching name is opened:
 require("awful.hotkeys_popup.keys")
-local functions = require("functions")
 
 beautiful.init(os.getenv("HOME") .. "/.config/somewm/theme.lua")
 -- Initialize lockscreen (must be after beautiful.init)
@@ -89,11 +89,16 @@ end)
 -- Wallpaper
 screen.connect_signal("request::wallpaper", function(s)
   if beautiful.wallpaper and gears.filesystem.file_readable(beautiful.wallpaper) then
+    local surf = gears.surface.load_silently(beautiful.wallpaper)
+    local cropped = surf and gears.surface.crop_surface {
+      surface = surf,
+      ratio   = s.geometry.width / s.geometry.height,
+    }
     awful.wallpaper {
       screen = s,
       widget = {
         {
-          image     = beautiful.wallpaper,
+          image     = cropped or beautiful.wallpaper,
           upscale   = true,
           downscale = true,
           widget    = wibox.widget.imagebox,
@@ -142,7 +147,9 @@ screen.connect_signal("request::desktop_decoration", function(s)
       c:move_to_screen(s)
       c:tags(tags)
     end
-  else
+  -- Prefer persisted tags (names/order/layout/selection) so renames survive a
+  -- reload; fall back to the profile's default tags only when none are stored.
+  elseif not functions.restore_tags(s) then
     layouts.default_tags(s)
   end
 
@@ -172,6 +179,20 @@ end
 -- Turn off monitors after 5 minutes (300s) of inactivity:
 awesome.set_idle_timeout("dpms", 300, function()
   awesome.dpms_off()
+end)
+
+-- Realign bottom-monitor windows (Minimeters, Rolling Sampler) after DPMS wake.
+-- Staggered to handle the race with kanshi re-negotiating output positions.
+awesome.connect_signal("dpms::on", function()
+  functions.schedule_bottom_realign()
+end)
+
+-- Realign when kanshi updates the bottom screen's geometry (mode/position change):
+screen.connect_signal("property::geometry", function(s)
+  local bottom = displays and displays["bottom"]
+  if bottom and s == bottom.screen then
+    functions.schedule_bottom_realign()
+  end
 end)
 
 require('autorun')

@@ -28,7 +28,7 @@ local layout_map = {
   vsplit     = layouts_list[1],
   hsplit     = layouts_list[2],
   float      = layouts_list[3],
-  centerwork = centerwork,
+  centerwork = layouts_list[4],
 }
 
 local function apply_tag_list(s, tag_def, fallback_layout)
@@ -51,16 +51,19 @@ local function apply_tag_list(s, tag_def, fallback_layout)
     end
   end
 
+  -- Names carry an "<index>:" prefix (matching the rename binding in
+  -- keybindings.lua). Rule references resolve the base name, so "2:browser"
+  -- still matches a rule asking for "browser" (see functions.find_tag).
   for i, item in ipairs(tags_to_add) do
     if type(item) == "string" or type(item) == "number" then
-      awful.tag.add(tostring(item), {
+      awful.tag.add(i .. ":" .. tostring(item), {
         layout   = default_layout,
         screen   = s,
         selected = (not has_selected and i == 1) or false,
       })
     elseif type(item) == "table" then
       local l = (item.layout and layout_map[item.layout]) or item.layout or default_layout
-      awful.tag.add(tostring(item.name), {
+      awful.tag.add(i .. ":" .. tostring(item.name), {
         layout   = l,
         screen   = s,
         selected = item.selected or (not has_selected and i == 1) or false,
@@ -102,10 +105,11 @@ layouts.default_tags = function(s)
   elseif tag_def then
     apply_tag_list(s, tag_def, layouts_list[1])
   else
-    awful.tag(
-      { "1", "2", "3", "4", "5", "6", "7", "8", "9" },
-      s, layouts_list[1]
-    )
+    local names = {}
+    for i = 1, 9 do
+      names[i] = i .. ":" .. i
+    end
+    awful.tag(names, s, layouts_list[1])
   end
 end
 

@@ -17,7 +17,7 @@ local assign_tag = function(matcher, screen_role, tag_name)
     rule       = rule,
     properties = {
       screen = target_screen,
-      tag    = tag_name
+      tag    = function(c) return functions.find_tag(c.screen, tag_name) end,
     }
   }
 end
@@ -30,7 +30,7 @@ local window_geometry = function(window_rule, geometry)
     -- end,
     properties = {
       screen   = displays["bottom"] and displays["bottom"].screen or nil,
-      tag      = "minimeters",
+      tag      = function(c) return functions.find_tag(c.screen, "minimeters") end,
       urgent   = false,
       floating = true,
       x        = geometry.x,
@@ -90,47 +90,14 @@ ruled.client.connect_signal("request::rules", function()
   assign_tag("vesktop", "right", "discord")
   assign_tag("fooyin", "left", "music")
 
-  local minimeters = function(meter_name)
-    return {
-      class = "app.minimeters.MiniMeters",
-      name = meter_name
-    }
+  -- Bottom-monitor windows: driven from functions.bottom_windows (single source of truth)
+  for _, item in ipairs(functions.bottom_windows) do
+    window_geometry(item.rule, item.geometry)
   end
-  window_geometry(minimeters("MiniMeters"), {
-    x = 3995,
-    y = 1687,
-    width = 827,
-    height = 245
-  })
-  window_geometry(minimeters("Stereometer"), {
-    x = 4461,
-    y = 1440,
-    width = 361,
-    height = 247
-  })
-  window_geometry(minimeters("Waveform"), {
-    x = 3992,
-    y = 1440,
-    width = 467,
-    height = 245
-  })
-  window_geometry(minimeters("Spectrogram"), {
-    x = 4824,
-    y = 1443,
-    width = 294,
-    height = 490
-  })
-  window_geometry({
-    class = "Rolling Sampler",
-    instance = "Rolling Sampler"
-  }, {
-    x = 3200,
-    y = 1440,
-    width = 787,
-    height = 247
-  })
 
-  --functions.restore_windows()
+  -- Restore per-window placement saved on the previous exit/reload. Appended
+  -- after the class rules so it overrides them for windows it matches.
+  functions.restore_windows()
 end)
 
 -- Add a titlebar if titlebars_enabled is set to true in the rules.
