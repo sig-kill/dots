@@ -18,7 +18,11 @@
 -- - Master width factor dynamically adjustable via mouse drag (Mod4 + Right Click) or keybindings.
 ---------------------------------------------------------------------------
 
-local math = math
+-- Clamp for master_width_factor, applied by both arrange() and the mouse
+-- resize handler.
+local MIN_MASTER_WIDTH_FACTOR = 0.05
+local MAX_MASTER_WIDTH_FACTOR = 0.95
+
 local capi = {
   screen = screen,
   mouse = mouse,
@@ -29,6 +33,10 @@ local centerwork = {
   name = "centerwork",
 }
 
+-- Geometry contract: the master keeps `master_width_factor` of the workarea and
+-- stays centered; the remaining width is split into a left and a right column
+-- (odd pixel goes to the right one), and each column is divided between its
+-- clients (remaining pixels go to the last one).
 function centerwork.arrange(p)
   local wa = p.workarea
   local cls = p.clients
@@ -36,7 +44,7 @@ function centerwork.arrange(p)
 
   local t = p.tag or (capi.screen and capi.screen[p.screen] and capi.screen[p.screen].selected_tag)
   local mwfact = (t and t.master_width_factor) or 0.5
-  mwfact = math.max(0.05, math.min(0.95, mwfact))
+  mwfact = math.max(MIN_MASTER_WIDTH_FACTOR, math.min(MAX_MASTER_WIDTH_FACTOR, mwfact))
 
   local main_width = math.floor(wa.width * mwfact)
   local side_width = wa.width - main_width
@@ -99,6 +107,8 @@ end
 
 centerwork.resize_jump_to_corner = false
 
+-- Mod4 + Right click: snap the pointer to the master border, then track the
+-- pointer until the button is released and update master_width_factor live.
 function centerwork.mouse_resize_handler(c, corner, x, y)
   if not c or not c.screen then return end
   local s = c.screen
@@ -124,7 +134,8 @@ function centerwork.mouse_resize_handler(c, corner, x, y)
       if btn then
         local dist = math.abs(m.x - center_x)
         local new_mwfact = (2 * dist) / wa.width
-        new_mwfact = math.min(math.max(new_mwfact, 0.05), 0.95)
+        new_mwfact = math.min(math.max(new_mwfact, MIN_MASTER_WIDTH_FACTOR),
+          MAX_MASTER_WIDTH_FACTOR)
         t.master_width_factor = new_mwfact
         return true
       end

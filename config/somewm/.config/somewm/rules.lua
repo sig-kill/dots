@@ -5,9 +5,19 @@ local awful = require("awful")
 local wibox = require("wibox")
 -- Declarative object management
 local ruled = require("ruled")
-local functions = require("functions")
 
-local assign_tag = function(matcher, screen_role, tag_name)
+local persist = require("persist")
+local profile = require("profile")
+local tags = require("tags")
+
+--------------------
+-- Rule helpers --
+--------------------
+
+-- Route windows matching `matcher` (a class string, or a rule table) to
+-- `tag_name` on the display whose role is `screen_role`. The rule id falls back
+-- to the matcher itself, so every helper call yields a distinctly named rule.
+local function assign_tag(matcher, screen_role, tag_name)
   local rule = type(matcher) == "table" and matcher
       or { class = matcher }
   local target_screen = displays[screen_role] and displays[screen_role].screen or nil
@@ -17,31 +27,34 @@ local assign_tag = function(matcher, screen_role, tag_name)
     rule       = rule,
     properties = {
       screen = target_screen,
-      tag    = function(c) return functions.find_tag(c.screen, tag_name) end,
+      tag    = function(c) return tags.find_tag(c.screen, tag_name) end,
     }
   }
 end
 
-local window_geometry = function(window_rule, geometry)
+-- Place one profile-pinned window: fixed geometry on the spec's display role
+-- and tag (profile.pinned_windows).
+local function pin_window(spec)
   ruled.client.append_rule {
-    rule = window_rule,
-    -- callback = function(c)
-    --   c:geometry(geometry)
-    -- end,
+    rule = spec.rule,
     properties = {
-      screen   = displays["bottom"] and displays["bottom"].screen or nil,
-      tag      = function(c) return functions.find_tag(c.screen, "minimeters") end,
+      screen   = displays[spec.role] and displays[spec.role].screen or nil,
+      tag      = function(c) return tags.find_tag(c.screen, spec.tag) end,
       urgent   = false,
       floating = true,
-      x        = geometry.x,
-      y        = geometry.y,
-      width    = geometry.width,
-      height   = geometry.height,
+      x        = spec.geometry.x,
+      y        = spec.geometry.y,
+      width    = spec.geometry.width,
+      height   = spec.geometry.height,
     }
   }
 end
 
-ruled.client.connect_signal("request::rules", function()
+-------------------
+-- Client rules --
+-------------------
+
+local function add_global_rule()
   ruled.client.append_rule {
     id         = "global",
     rule       = {},
@@ -52,7 +65,9 @@ ruled.client.connect_signal("request::rules", function()
       placement = awful.placement.no_overlap + awful.placement.no_offscreen
     }
   }
+end
 
+local function add_floating_rule()
   ruled.client.append_rule {
     id         = "floating",
     rule_any   = {
@@ -73,7 +88,9 @@ ruled.client.connect_signal("request::rules", function()
     },
     properties = { floating = true }
   }
+end
 
+local function add_titlebar_rule()
   ruled.client.append_rule {
     id         = "titlebars",
     rule_any   = {
@@ -81,7 +98,12 @@ ruled.client.connect_signal("request::rules", function()
     },
     properties = { titlebars_enabled = true }
   }
+end
 
+-- Application -> display role + tag. Rules are matched in append order, and the
+-- matchers are Lua patterns, so "firefox" also matches
+-- "firefox-developer-edition".
+local function add_class_tag_rules()
   assign_tag("Plex", "left", "plex")
   assign_tag("steam", "middle", "steam")
   assign_tag("firefox", "middle", "browser")
@@ -89,16 +111,30 @@ ruled.client.connect_signal("request::rules", function()
   assign_tag("raysession", "middle", "carla")
   assign_tag("vesktop", "right", "discord")
   assign_tag("fooyin", "left", "music")
+end
 
-  -- Bottom-monitor windows: driven from functions.bottom_windows (single source of truth)
-  for _, item in ipairs(functions.bottom_windows) do
-    window_geometry(item.rule, item.geometry)
+-- Pinned windows: driven by profile.pinned_windows (single source of truth).
+local function add_pinned_window_rules()
+  for _, spec in ipairs(profile.pinned_windows or {}) do
+    pin_window(spec)
   end
+end
+
+ruled.client.connect_signal("request::rules", function()
+  add_global_rule()
+  add_floating_rule()
+  add_titlebar_rule()
+  add_class_tag_rules()
+  add_pinned_window_rules()
 
   -- Restore per-window placement saved on the previous exit/reload. Appended
   -- after the class rules so it overrides them for windows it matches.
-  functions.restore_windows()
+  persist.restore_windows()
 end)
+
+-----------------
+-- Titlebars --
+-----------------
 
 -- Add a titlebar if titlebars_enabled is set to true in the rules.
 client.connect_signal("request::titlebars", function(c)
@@ -142,36 +178,41 @@ end)
 -- Notifications --
 -------------------
 
--- Error handling
-naughty.connect_signal("request::display_error", function(message, startup)
+local function show_startup_error(message, startup)
   naughty.notification {
     urgency = "critical",
     title   = "Oops, an error happened" .. (startup and " during startup!" or "!"),
     message = message
   }
-end)
+end
+
+-- Error handling
+naughty.connect_signal("request::display_error", show_startup_error)
+
+local function build_x11_fallback_message(info)
+  return string.format(
+    "Your config was skipped because it contains X11-specific code that " ..
+    "won't work on Wayland.\n\n" ..
+    "File: %s:%d\n" ..
+    "Pattern: %s\n" ..
+    "Code: %s\n\n" ..
+    "Suggestion: %s\n\n" ..
+    "Edit your rc.lua to remove X11 dependencies, then restart somewm.",
+    info.config_path or "unknown",
+    info.line_number or 0,
+    info.pattern or "unknown",
+    info.line_content or "",
+    info.suggestion or "See somewm migration guide"
+  )
+end
+
 if awesome.x11_fallback_info then
   -- Defer notification until after startup (naughty needs event loop running)
   gears.timer.delayed_call(function()
-    local info = awesome.x11_fallback_info
-    local msg = string.format(
-      "Your config was skipped because it contains X11-specific code that " ..
-      "won't work on Wayland.\n\n" ..
-      "File: %s:%d\n" ..
-      "Pattern: %s\n" ..
-      "Code: %s\n\n" ..
-      "Suggestion: %s\n\n" ..
-      "Edit your rc.lua to remove X11 dependencies, then restart somewm.",
-      info.config_path or "unknown",
-      info.line_number or 0,
-      info.pattern or "unknown",
-      info.line_content or "",
-      info.suggestion or "See somewm migration guide"
-    )
     naughty.notification {
       urgency = "critical",
       title   = "Config contains X11 patterns - using fallback",
-      message = msg,
+      message = build_x11_fallback_message(awesome.x11_fallback_info),
       timeout = 0 -- Don't auto-dismiss
     }
   end)
@@ -192,6 +233,6 @@ naughty.connect_signal("request::display", function(n)
   naughty.layout.box { notification = n }
 end)
 
-awesome.connect_signal("exit", function(reason_restart)
-  functions.save_open_windows()
+awesome.connect_signal("exit", function(_reason)
+  persist.save_open_windows()
 end)

@@ -1,22 +1,20 @@
 local gears = require("gears")
 local awful = require("awful")
 local hotkeys_popup = require("awful.hotkeys_popup")
--- Enable hotkeys help widget for VIM and other apps
--- when client with a matching name is opened:
-require("awful.hotkeys_popup.keys")
---local lain = require("lain")
---local machi = require("layout-machi")
+-- awful.hotkeys_popup.keys (the popup shown when a matching client opens) is
+-- required by rc.lua, before this module loads.
+local ruled = require("ruled")
+
+-- The modifier every binding below is built on. Exported at the bottom of this
+-- file for the taglist buttons (widgets.taglist), so no module has to read it
+-- from a global.
+local modkey = "Mod4"
 
 --------------------
 -- Mouse bindings --
 --------------------
 
 -- 1, 2, 3, 4, 5: Left, Middle, Right, Scroll up, Scroll down
---awful.mouse.append_global_mousebindings({
---  awful.button({}, 3, function() mymainmenu:toggle() end),
---  awful.button({}, 4, awful.tag.viewnext),
---  awful.button({}, 5, awful.tag.viewprev),
---})
 client.connect_signal("request::default_mousebindings", function()
   awful.mouse.append_client_mousebindings({
     -- Left click to focus
@@ -45,22 +43,20 @@ client.connect_signal("request::default_mousebindings", function()
   })
 end)
 
-local ruled = require("ruled")
+--------------------
+-- Sloppy focus --
+--------------------
+
+-- Clients matching an entry here keep the focus they had when the mouse enters
+-- them. Empty today: the Steam exclusion is disabled on purpose, so every
+-- client (including the bottom-monitor meters) takes focus on hover.
+local focus_entry_exclusions = {
+  -- { name = "", class = "" },
+}
 
 -- Sloppy focus (application focus follows mouse)
 client.connect_signal("mouse::enter", function(c)
-  local class = c.class or ""
-  local instance = c.instance or ""
-
-  -- Exclude all Steam windows (case-insensitive)
-  -- if class:lower():find("^steam") or instance:lower():find("^steam") then
-  --   return
-  -- end
-
-  local excluded = {
-    -- { name = "", class = "" },
-  }
-  for _, rule in ipairs(excluded) do
+  for _, rule in ipairs(focus_entry_exclusions) do
     if ruled.client.match(c, rule) then return end
   end
 
@@ -71,6 +67,10 @@ end)
 -- Keyboard bindings --
 -----------------------
 
+-- Groups are `{ "group name", { modifiers, key, description, callback }, ... }`.
+-- Only the first four entries of each binding are used: a fifth entry and
+-- beyond is silently ignored. Bindings that need a keygroup (numrow/numpad,
+-- below) cannot be expressed here and are appended separately.
 local function make_keys(keys)
   local result = {}
   for _, group in ipairs(keys) do
@@ -87,18 +87,73 @@ local function make_keys(keys)
   return result
 end
 
+local function run_lua_prompt()
+  awful.prompt.run {
+    prompt = "Run Lua code: ",
+    textbox = awful.screen.focused().mypromptbox.widget,
+    exe_callback = function(input)
+      local naughty = require('naughty')
+      if not input or #input == 0 then
+        naughty.notify { text = "Empty input" }
+      else
+        local fn, err = (loadstring or load)(input)
+        if fn then
+          local success, res = pcall(fn)
+          if success then
+            naughty.notify({ text = gears.debug.dump_return(res) })
+          else
+            naughty.notify({ text = "Error: " .. tostring(res) })
+          end
+        else
+          naughty.notify({ text = "Compile error: " .. tostring(err) })
+        end
+      end
+    end,
+    history_path = gears.filesystem.get_cache_dir() .. "history_eval"
+  }
+end
+
+local function rename_tag_prompt()
+  awful.prompt.run {
+    prompt = "New tag name: ",
+    textbox = awful.screen.focused().mypromptbox.widget,
+    exe_callback = function(new_name)
+      if not new_name or #new_name == 0 then return end
+      local t = awful.screen.focused().selected_tag
+      if t then t.name = t.index .. ":" .. new_name end
+    end
+  }
+end
+
+local function take_screenshot()
+  awful.spawn.with_shell('grim -g "$(slurp)" - | swappy -f -')
+end
+
+-- Player start/pause. Shared by the mouse side button (mapped to
+-- Ctrl+Alt+KP_Divide, which results in XF86Ungrab) and the media key.
+local function play_pause_player()
+  awful.spawn.with_shell("playerctl --player=fooyin,%any play-pause || pgrep -x fooyin > /dev/null || fooyin")
+end
+
+local function restore_minimized_client()
+  local c = awful.client.restore()
+  -- Focus restored client
+  if c then
+    c:emit_signal("request::activate", "key.unminimize", { raise = true })
+  end
+end
+
 local globalkeys = {
-  -- { mod, key, description, callback }
+  -- { modifiers, key, description, callback }
   { "awesome",
     { { modkey },          "/",     "show help",     hotkeys_popup.show_help },
-    { { modkey, "Shift" }, "/",     "debug",         require('functions').save_open_windows },
+    { { modkey, "Shift" }, "/",     "debug",         require('persist').save_open_windows },
     { { modkey, "Shift" }, "r",     "reload config", awesome.restart },
     { { modkey, "Shift" }, "q",     "quit",          awesome.quit },
     { { modkey },          "Space", "next layout",   function() awful.layout.inc(1) end },
     { { modkey, "Shift" }, "Space", "prev layout",   function() awful.layout.inc(-1) end },
     { { modkey },          "w",     "lock screen",   function() awful.spawn.single_instance('hyprlock') end },
-    { { "Control", "Shift" }, "x", "screenshot",
-      function() awful.spawn.with_shell('grim -g "$(slurp)" - | swappy -f -') end },
+    { { "Control", "Shift" }, "x", "screenshot", take_screenshot },
   },
   { "launcher",
     { { modkey },          "Return", "open terminal", function() awful.spawn(terminal) end },
@@ -106,41 +161,11 @@ local globalkeys = {
     { { modkey, "Control" }, "Return", "open app", function()
       awful.screen.focused().mypromptbox:run()
     end },
-    { { modkey }, "x", "execute lua",
-      function()
-        awful.prompt.run {
-          prompt = "Run Lua code: ",
-          textbox = awful.screen.focused().mypromptbox.widget,
-          exe_callback = function(input)
-            local naughty = require('naughty')
-            if not input or #input == 0 then
-              naughty.notify { text = "Empty input" }
-            else
-              local fn, err = (loadstring or load)(input)
-              if fn then
-                local success, res = pcall(fn)
-                if success then
-                  naughty.notify({ text = gears.debug.dump_return(res) })
-                else
-                  naughty.notify({ text = "Error: " .. tostring(res) })
-                end
-              else
-                naughty.notify({ text = "Compile error: " .. tostring(err) })
-              end
-            end
-          end,
-          history_path = gears.filesystem.get_cache_dir() .. "history_eval"
-        }
-      end },
+    { { modkey }, "x", "execute lua", run_lua_prompt },
   },
   { "media",
-    -- g502 side button (mapped to Ctrl+Alt+KP_Divide, which results in XF86Ungrab)
-    { { "Control", "Mod1" }, "XF86Ungrab", "[mouse] play/pause", function()
-      awful.spawn.with_shell("playerctl --player=fooyin,%any play-pause || pgrep -x fooyin > /dev/null || fooyin")
-    end },
-    { {}, "XF86AudioPlay", "play/pause", function()
-      awful.spawn.with_shell("playerctl --player=fooyin,%any play-pause || pgrep -x fooyin > /dev/null || fooyin")
-    end },
+    { { "Control", "Mod1" }, "XF86Ungrab", "[mouse] play/pause", play_pause_player },
+    { {}, "XF86AudioPlay", "play/pause", play_pause_player },
     { {}, "XF86AudioStop", "stop", function()
       awful.spawn("playerctl stop")
     end },
@@ -158,19 +183,7 @@ local globalkeys = {
     end },
   },
   { "tags",
-    { { modkey }, "r", "rename tag",
-      function()
-        awful.prompt.run {
-          prompt = "New tag name: ",
-          textbox = awful.screen.focused().mypromptbox.widget,
-          exe_callback = function(new_name)
-            if not new_name or #new_name == 0 then return end
-            local t = awful.screen.focused().selected_tag
-            if t then t.name = t.index .. ":" .. new_name end
-          end
-        }
-      end,
-    }
+    { { modkey }, "r", "rename tag", rename_tag_prompt },
   },
   { "client",
     { { modkey },          "h", "focus left",  function() awful.client.focus.global_bydirection("left") end },
@@ -181,13 +194,7 @@ local globalkeys = {
     { { modkey, "Shift" }, "j", "swap down",   function() awful.client.swap.global_bydirection("down") end },
     { { modkey, "Shift" }, "k", "swap up",     function() awful.client.swap.global_bydirection("up") end },
     { { modkey, "Shift" }, "l", "swap right",  function() awful.client.swap.global_bydirection("right") end },
-    { { modkey, "Shift" }, "n", "unminimize", function()
-      local c = awful.client.restore()
-      -- Focus restored client
-      if c then
-        c:emit_signal("request::activate", "key.unminimize", { raise = true })
-      end
-    end },
+    { { modkey, "Shift" }, "n", "unminimize",  restore_minimized_client },
   }
 }
 awful.keyboard.append_global_keybindings(make_keys(globalkeys))
@@ -215,6 +222,7 @@ client.connect_signal("request::default_keybindings", function()
   awful.keyboard.append_client_keybindings(make_keys(clientkeys))
 end)
 
+-- Keygroup bindings (numrow/numpad): not expressible in the make_keys DSL above.
 awful.keyboard.append_global_keybindings({
   awful.key {
     modifiers   = { modkey },
@@ -283,3 +291,5 @@ awful.keyboard.append_global_keybindings({
     end,
   }
 })
+
+return { modkey = modkey }
