@@ -231,6 +231,11 @@ require('rules')
 -----------
 
 awesome._set_keyboard_setting("numlock", true)
+-- Set the layout explicitly. somewm's xkb_get_group_names() falls back to
+-- human-readable keymap names ("pc+English (US)") when no RMLVO layout is
+-- configured, and awful.widget.keyboardlayout cannot parse those, so the
+-- wibar entry stays blank. With the layout set it returns "pc+us".
+awful.input.xkb_layout = "us"
 awful.input.tap_to_click = 1
 awful.input.keyboard_repeat_delay = 450
 if profile.accel_speed then
@@ -244,6 +249,14 @@ end
 -- Turn off monitors after 15 minutes of inactivity.
 awesome.set_idle_timeout("dpms", 15 * 60, function()
   awesome.dpms_off()
+end)
+
+client.connect_signal("property::fullscreen", function()
+    local dominated = false
+    for _, c in ipairs(client.get()) do
+        if c.fullscreen then dominated = true; break end
+    end
+    awesome.idle_inhibit = dominated
 end)
 
 -- Realign pinned windows (Minimeters, Rolling Sampler) after DPMS wake.

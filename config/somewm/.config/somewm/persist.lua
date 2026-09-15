@@ -186,7 +186,7 @@ end
 -- change on a screen that owns them. restore_windows below skips them: the
 -- config owns their placement, not the cache.
 
-local PIN_REALIGN_DELAYS = { 0.5, 1.5 }
+local PIN_REALIGN_DELAYS = { 0.5, 2.5 }
 local pinned = profile.pinned_windows or {}
 
 -- First spec whose rule matches `c`, which may be a client or a cache record:
@@ -285,6 +285,10 @@ local claimed = setmetatable({}, { __mode = "k" })
 local CLAIM_TIMEOUT_S = 10
 local CLAIM_TICK_S = 1
 
+-- Ids of the placement rules appended below, so a rescan can drop the previous
+-- pass before appending fresh ones (append_rule does not dedup).
+local placement_rule_ids = {}
+
 -- Windows that share a class+instance can only be told apart by title, and a
 -- title is a poor key: ruled.client matches it once, when the window maps, so
 -- it has to be identical at that instant. Firefox maps a window before its tab
@@ -358,11 +362,37 @@ end
 -- rule and is placed the moment it maps. nil rule fields are simply absent, so
 -- a rule can never become a catch-all: entries with neither class nor instance
 -- were filtered out by eligible_entries.
+--
+-- The rule is one-shot: the first window it matches is placed, then the rule
+-- removes itself. Without that, one cached terminal kept forcing every later
+-- terminal onto the tag it was on before the last reload.
 local function add_placement_rule(entry, index)
   local output = displays[entry.role]
+  local id = "persisted_" .. index
+
+  -- The client that consumed this rule. The property functions below run more
+  -- than once per client (screen in the early pass, tag in the high-priority
+  -- pass), so the gate answers true for it every time and false afterwards.
+  local claimant = nil
+  local function first(c)
+    if claimant == nil then
+      claimant = c
+      -- Safe here: the properties for `c` are already built, so removing the
+      -- rule only affects clients managed later.
+      ruled.client.remove_rule(id)
+    end
+    return claimant == c
+  end
+
   local properties = {
-    screen = output and output.screen,
-    tag = function(c) return tags.find_tag(c.screen, entry.tag) end,
+    screen = function(c)
+      if not first(c) then return nil end
+      return output and output.screen
+    end,
+    tag = function(c)
+      if not first(c) then return nil end
+      return tags.find_tag(c.screen, entry.tag)
+    end,
   }
   local p = placement(entry)
   if p.geometry then
@@ -373,7 +403,7 @@ local function add_placement_rule(entry, index)
     properties.height = p.geometry.height
   end
   ruled.client.append_rule {
-    id = "persisted_" .. index,
+    id = id,
     rule = { class = entry.class, instance = entry.instance },
     properties = properties,
   }
@@ -418,9 +448,12 @@ M.restore_windows = function()
   local data = read_cache()
 
   -- If the client list is rescanned this runs again; start from a clean slate
-  -- so windows are never claimed against a stale entry twice.
+  -- so windows are never claimed against a stale entry twice, and drop the
+  -- rules of the previous pass so a rescan cannot arm a second copy.
   for key in pairs(groups) do groups[key] = nil end
   for c in pairs(claimed) do claimed[c] = nil end
+  for _, id in ipairs(placement_rule_ids) do ruled.client.remove_rule(id) end
+  placement_rule_ids = {}
 
   local key_count = {}
   for index, entry in ipairs(eligible_entries(data.clients, key_count)) do
@@ -429,6 +462,7 @@ M.restore_windows = function()
       collect_group(key, entry)
     else
       add_placement_rule(entry, index)
+      placement_rule_ids[#placement_rule_ids + 1] = "persisted_" .. index
     end
   end
 

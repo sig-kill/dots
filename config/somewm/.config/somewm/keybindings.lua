@@ -33,7 +33,12 @@ client.connect_signal("request::default_mousebindings", function()
 
       local t = c.screen and c.screen.selected_tag
       local l = t and t.layout
-      if not c.floating and l and l.mouse_resize_handler then
+      -- Clients on a floating-layout tag report floating == false (that flag
+      -- only marks explicit floats), yet floating's handler is corner based:
+      -- it builds the mousegrabber cursor from `corner`. Route those clients
+      -- to awful.mouse.client.resize, which derives the corner itself.
+      if not c.floating and l and l ~= awful.layout.suit.floating
+          and l.mouse_resize_handler then
         local cur = mouse.coords()
         l.mouse_resize_handler(c, nil, cur.x, cur.y)
       else
@@ -143,17 +148,46 @@ local function restore_minimized_client()
   end
 end
 
+-- Lock with Hyprlock and shorten the monitor-off idle timeout while locked.
+-- SomeWM emits no Lua signal for ext-session-lock transitions, and
+-- awful.spawn.single_instance reports client creation, not process exit, so
+-- the lock state is tracked here: a 5-minute "dpms-locked" timeout is armed
+-- on spawn and cleared when the hyprlock process exits (exit = unlock). The
+-- flag swallows key-repeat presses before hyprlock acquires the lock; a
+-- second hyprlock would exit instantly and clear the timeout while locked.
+local locking = false
+
+local function lock_screen()
+  if locking or awesome.lock_mechanism then return end
+  locking = true
+
+  awesome.set_idle_timeout("dpms-locked", 5 * 60, function()
+    awesome.dpms_off()
+  end)
+
+  local spawned = awful.spawn.easy_async('hyprlock', function()
+    locking = false
+    awesome.clear_idle_timeout("dpms-locked")
+  end)
+  if type(spawned) == "string" then
+    -- Spawn failed outright (e.g. binary missing); undo the lock state.
+    locking = false
+    awesome.clear_idle_timeout("dpms-locked")
+  end
+end
+
 local globalkeys = {
   -- { modifiers, key, description, callback }
   { "awesome",
-    { { modkey },          "/",     "show help",     hotkeys_popup.show_help },
-    { { modkey, "Shift" }, "/",     "debug",         require('persist').save_open_windows },
-    { { modkey, "Shift" }, "r",     "reload config", awesome.restart },
-    { { modkey, "Shift" }, "q",     "quit",          awesome.quit },
-    { { modkey },          "Space", "next layout",   function() awful.layout.inc(1) end },
-    { { modkey, "Shift" }, "Space", "prev layout",   function() awful.layout.inc(-1) end },
-    { { modkey },          "w",     "lock screen",   function() awful.spawn.single_instance('hyprlock') end },
-    { { "Control", "Shift" }, "x", "screenshot", take_screenshot },
+    { { modkey },             "/",     "show help",   hotkeys_popup.show_help },
+    { { modkey, "Shift" },    "/",     "debug",       require('persist').save_open_windows },
+    -- modkey+Shift+r (reload) is not here: it is bound to the key *release*,
+    -- see the append below the keygroup block.
+    { { modkey, "Shift" },    "q",     "quit",        awesome.quit },
+    { { modkey },             "Space", "next layout", function() awful.layout.inc(1) end },
+    { { modkey, "Shift" },    "Space", "prev layout", function() awful.layout.inc(-1) end },
+    { { modkey },             "w",     "lock screen", lock_screen },
+    { { "Control", "Shift" }, "x",     "screenshot",  take_screenshot },
   },
   { "launcher",
     { { modkey },          "Return", "open terminal", function() awful.spawn(terminal) end },
@@ -164,8 +198,8 @@ local globalkeys = {
     { { modkey }, "x", "execute lua", run_lua_prompt },
   },
   { "media",
-    { { "Control", "Mod1" }, "XF86Ungrab", "[mouse] play/pause", play_pause_player },
-    { {}, "XF86AudioPlay", "play/pause", play_pause_player },
+    { { "Control", "Mod1" }, "XF86Ungrab",    "[mouse] play/pause", play_pause_player },
+    { {},                    "XF86AudioPlay", "play/pause",         play_pause_player },
     { {}, "XF86AudioStop", "stop", function()
       awful.spawn("playerctl stop")
     end },
@@ -290,6 +324,72 @@ awful.keyboard.append_global_keybindings({
       end
     end,
   }
+})
+
+---------------------------------------------------------------------------
+-- Reload quiet period
+---------------------------------------------------------------------------
+
+-- A hot-reload closes the old Lua state, so a reload that lands while the
+-- previous one's systray D-Bus re-probe still has replies in flight abandons
+-- an lgi callback that then fires into freed memory: freed cif, general
+-- protection fault inside the closure guard (2026-09-14 21:32 crash). The
+-- exposure is the first moments of a rebuilt state - a reload 1s after the
+-- previous one leaked a source and crashed, one 6s after did not.
+--
+-- So a state that itself came from a reload refuses to start another one for
+-- a few seconds. Cold boot is exempt: somewm only sets awesome._restart on a
+-- state rebuilt by luaA_hot_reload, so a fresh session reloads at once.
+--
+-- This shadows awesome.restart before the reload binding below captures it,
+-- which also puts rc.lua's menu item and awful.ipc's `reload` command behind
+-- the same guard instead of letting them bypass it.
+local RELOAD_QUIET_S = 3
+local reload_ready = not awesome._restart
+local restart = awesome.restart
+
+if awesome._restart then
+  -- Single shot: gears.timer stops when the callback returns false, and it
+  -- releases its source on "exit", so it cannot outlive this state.
+  gears.timer.start_new(RELOAD_QUIET_S, function()
+    reload_ready = true
+    return false
+  end)
+end
+
+awesome.restart = function()
+  if not reload_ready then
+    print(string.format("somewm: reload ignored, a reload already ran "
+      .. "within the last %ds", RELOAD_QUIET_S))
+    return
+  end
+  reload_ready = false
+  restart()
+end
+
+-- Reload on the key *release*, not on the press.
+--
+-- SomeWM re-fires a handled keybinding from the keyboard repeat timer
+-- (input.c: keyrepeat() calls keybinding() again, hardcoded to the press
+-- condition), and a reload blocks the event loop for longer than the repeat
+-- delay, so one press runs awesome.restart() twice. The second reload closes
+-- the Lua state that systray's post-reload D-Bus re-probe still has a reply in
+-- flight for, and the abandoned lgi callback then fires into freed memory
+-- (freed cif, GP fault in the closure guard: 2026-09-14 21:32 crash). Repeat
+-- dispatch is always a press, so a release-bound restart cannot be re-fired:
+-- it runs once per press, on the way up.
+--
+-- What makes this match is that `r` comes up while Mod4 and Shift are still
+-- held - objects/keybinding.c compares the modifier mask exactly, so releasing
+-- either modifier first loses the event. Release the letter first.
+awful.keyboard.append_global_keybindings({
+  awful.key {
+    modifiers   = { modkey, "Shift" },
+    key         = "r",
+    description = "reload config",
+    group       = "awesome",
+    on_release  = awesome.restart,
+  },
 })
 
 return { modkey = modkey }

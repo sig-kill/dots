@@ -4,6 +4,24 @@ local wibox = require("wibox")
 
 local widgets = {}
 
+-- Load all widgets from this directory.
+do
+  local dir = gears.filesystem.get_configuration_dir() .. "widgets"
+  if gears.filesystem.dir_readable(dir) then
+    local Gio = require("lgi").Gio
+    local enumerator = Gio.File.new_for_path(dir)
+      :enumerate_children("standard::name", Gio.FileQueryInfoFlags.NONE)
+    for info in function() return enumerator:next_file() end do
+      -- `[^.]` drops dotfiles, and the capture is the module stem.
+      local stem = info:get_name():match("^([^.].*)%.lua$")
+      if stem and stem ~= "init" then
+        widgets[stem] = require("widgets." .. stem)
+      end
+    end
+    enumerator:close()
+  end
+end
+
 -----------------------------
 -- Client widget builders --
 -----------------------------
@@ -69,75 +87,28 @@ end
 
 -- One instance per config load, shared by every screen's wibar (rc.lua builds
 -- one wibar per output).
-local keyboard_layout = awful.widget.keyboardlayout()
 local separator = wibox.widget.textbox(" | ")
-local music_player_widget = wibox.widget.textbox()
 local time_widget = wibox.widget.textclock("%a, %b %d %I:%M:%S", 1)
-
--- The player state is polled into a runtime file rather than read from a
--- `playerctl --follow` pipe: reading a pipe needs
--- awful.spawn.with_line_callback, whose lgi (Gio) callback outlives a config
--- reload and crashes the compositor when the abandoned callback fires.
--- Spawning a process and reading a plain file are both reload-safe.
-local MPRIS_FILE = (os.getenv("XDG_RUNTIME_DIR") or "/tmp") .. "/somewm-mpris"
-local mpris_text
-
-local function poll_player_state()
-  local f = io.open(MPRIS_FILE, "r")
-  if f then
-    local line = f:read("*l")
-    f:close()
-    if line and line ~= mpris_text then
-      mpris_text = line
-      music_player_widget:set_text(line:gsub('<Playing>', ''):gsub('<.+>', ''))
-    end
-  end
-  awful.spawn.with_shell(
-    "playerctl -p fooyin metadata "
-    .. "--format '<{{status}}> {{artist}} - {{title}}' "
-    .. "> " .. MPRIS_FILE .. ".tmp 2>/dev/null && "
-    .. "mv " .. MPRIS_FILE .. ".tmp " .. MPRIS_FILE)
-end
-
-gears.timer {
-  timeout = 1,
-  autostart = true,
-  callback = poll_player_state,
-}
-
-music_player_widget:buttons(gears.table.join(
-  awful.button({}, 1, function()
-    awful.spawn.with_shell("fooyin -t")
-  end)))
 
 ------------
 -- Wibar --
 ------------
 
--- Right-hand side of the bar. Separators travel with the widget they precede,
--- so a widget hidden by the per-monitor config (profile.wibar_config) leaves no
--- dangling separator.
-local function build_right_widgets(opts, s)
-  local right_widgets = {
-    layout = wibox.layout.fixed.horizontal,
-    separator,
-    keyboard_layout,
-  }
-
-  local function add_optional_widget(widget)
+-- Join widgets into a horizontal row, putting `separator` between the widgets
+-- that are present. A widget omitted from the per-monitor config
+-- (profile.wibar_config) takes its separator with it, and the row never leads
+-- or trails with one.
+local function horizontal_row(child_list)
+  local row = { layout = wibox.layout.fixed.horizontal }
+  for _, widget in ipairs(child_list) do
     if widget then
-      right_widgets[#right_widgets + 1] = separator
-      right_widgets[#right_widgets + 1] = widget
+      if #row > 0 then
+        row[#row + 1] = separator
+      end
+      row[#row + 1] = widget
     end
   end
-
-  add_optional_widget(opts.tray ~= false and wibox.widget.systray())
-  add_optional_widget(opts.media ~= false and music_player_widget)
-  add_optional_widget(opts.clock ~= false and time_widget)
-  right_widgets[#right_widgets + 1] = separator
-  right_widgets[#right_widgets + 1] = s.mylayoutbox
-
-  return right_widgets
+  return row
 end
 
 widgets.wibar = function(s, opts)
@@ -148,14 +119,16 @@ widgets.wibar = function(s, opts)
     screen   = s,
     widget   = {
       layout = wibox.layout.align.horizontal,
-      { -- Left widgets
-        layout = wibox.layout.fixed.horizontal,
-        s.mytaglist,
-        s.mypromptbox,
-        separator,
+      -- Left widgets
+      horizontal_row { s.mytaglist, s.mypromptbox },
+      s.mytasklist, -- Middle widget
+      -- Right widgets
+      horizontal_row {
+        opts.tray ~= false and wibox.widget.systray(),
+        opts.media ~= false and widgets.music.widget,
+        opts.clock ~= false and time_widget,
+        s.mylayoutbox,
       },
-      s.mytasklist,               -- Middle widget
-      build_right_widgets(opts, s), -- Right widgets
     }
   }
 end

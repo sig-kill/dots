@@ -1,3 +1,45 @@
+--- Jump to the buffer lualine lists at position `i` in the tabline.
+---@param i integer
+local function lualine_buffer_jump(i)
+  return function()
+    vim.cmd("LualineBuffersJump! " .. i)
+  end
+end
+
+-- `:b<digit>` jumps by tabline position, `:b ` opens the buffers picker
+local buffer_keys = {}
+for i = 1, 9 do
+  buffer_keys[i] = { ":b" .. i, lualine_buffer_jump(i), desc = "Buffer " .. i }
+end
+
+--- Name of the buffer lualine lists at position `i` in the tabline
+---@param i integer
+---@return string
+local function tabline_buffer_name(i)
+  local buf = (require("lualine.components.buffers").bufpos2nr or {})[i]
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then
+    return "no buffer"
+  end
+  local name = vim.api.nvim_buf_get_name(buf)
+  return (name == "" and "[No Name]" or vim.fn.fnamemodify(name, ":~:."))
+      .. (vim.bo[buf].modified and " [+]" or "")
+end
+
+-- which-key re-evaluates these on every popup, so labels track the tabline
+do
+  local specs = { { ":b", group = "Buffers" } }
+  for i = 1, 9 do
+    local n = i
+    specs[#specs + 1] = {
+      ":b" .. n,
+      desc = function()
+        return tabline_buffer_name(n)
+      end,
+    }
+  end
+  require("which-key").add(specs)
+end
+
 return {
   {
     "folke/snacks.nvim",
@@ -60,19 +102,19 @@ return {
       words = { enabled = true },
       rename = { enabled = true },
     },
-    keys = {
+    keys = vim.list_extend({
       { "<leader>/", function() Snacks.picker.grep() end,  desc = "Grep" },
       { "<C-p>",     function() Snacks.picker.smart() end, desc = "Smart Find Files" },
       {
         ":E ",
         function()
           Snacks.picker.files({
-            exclude = "GoogleDrive"
+            exclude = { "GoogleDrive" }
           })
         end,
         desc = "Find Files"
       },
-      { ":b",          function() Snacks.picker.buffers() end,   desc = "Buffers" },
+      { ":b ",         function() Snacks.picker.buffers() end,   desc = "Buffers" },
       { ":B ",         function() Snacks.picker.buffers() end,   desc = "Buffers" },
       { ":reg<Enter>", function() Snacks.picker.registers() end, desc = "Registers" },
       { "<leader>u",   function() Snacks.picker.undo() end,      desc = "Undo tree" },
@@ -81,17 +123,17 @@ return {
         function() Snacks.picker.grep({ cwd = vim.fn.stdpath("config") }) end,
         desc = "Plugin specs"
       },
-      { "<leader>p", function() Snacks.picker.commands() end,            desc = "Commands" },
-      { "gr",        function() Snacks.picker.lsp_references() end,      desc = "Find references" },
-      { "gd",        function() Snacks.picker.lsp_definitions() end,     desc = "Go to definition" },
-      { "gD",        function() Snacks.picker.lsp_declarations() end,    desc = "Go to declaration" },
-      { "gI",        function() Snacks.picker.lsp_implementations() end, desc = "Go to implementation" },
+      { "<leader>p",  function() Snacks.picker.commands() end,            desc = "Commands" },
+      { "gr",         function() Snacks.picker.lsp_references() end,      desc = "Find references" },
+      { "gd",         function() Snacks.picker.lsp_definitions() end,     desc = "Go to definition" },
+      { "gD",         function() Snacks.picker.lsp_declarations() end,    desc = "Go to declaration" },
+      { "gI",         function() Snacks.picker.lsp_implementations() end, desc = "Go to implementation" },
       { "<leader>ss", function() Snacks.picker.lsp_symbols() end,         desc = "LSP symbols" },
       {
         "<leader>l",
         function() Snacks.picker.explorer({ matcher = { fuzzy = true } }) end,
         desc = "Explorer"
       }
-    }
+    }, buffer_keys)
   }
 }
