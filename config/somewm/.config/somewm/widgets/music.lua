@@ -18,6 +18,9 @@ local awful = require("awful")
 local beautiful = require("beautiful")
 local gears = require("gears")
 local wibox = require("wibox")
+local profile = require("profile")
+
+local player = profile.media_player or "fooyin"
 
 local dpi = require("beautiful.xresources").apply_dpi
 
@@ -138,7 +141,7 @@ end
 local function start_follow()
   awful.spawn.with_shell(
     "exec 9>'" .. MPRIS_FILE .. ".lock'; flock -n 9 || exit 0; "
-    .. "while :; do playerctl -p fooyin metadata -F --format "
+    .. "while :; do playerctl -p '" .. player .. "' metadata -F --format "
     .. MPRIS_FORMAT .. " 2>/dev/null | while IFS= read -r line; do "
     .. "printf '%s\\n' \"$line\" > '" .. MPRIS_FILE .. ".tmp' && "
     .. "mv '" .. MPRIS_FILE .. ".tmp' '" .. MPRIS_FILE .. "'; done; "
@@ -157,7 +160,7 @@ gears.timer {
 -- Buttons on the row, not the textbox, so the album art is clickable too.
 music.widget:buttons(gears.table.join(
   awful.button({}, 1, function()
-    awful.spawn.with_shell("fooyin -t")
+    awful.spawn.with_shell("playerctl -p '" .. player .. "' play-pause")
   end)))
 
 return music

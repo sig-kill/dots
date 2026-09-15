@@ -28,6 +28,7 @@ local profiles = {
   work = {
     terminal = "alacritty",
     accel_speed = -0.4,
+    media_player = "%any",
     tags = {
       left = { "chat", "cider", "3", "4", "5", "6", "7", "8", "9" },
       middle = { "work", "2", "3", "4", "5", "6", "7", "8", "9" },
@@ -35,6 +36,7 @@ local profiles = {
   },
   personal = {
     terminal = "ghostty",
+    media_player = "fooyin",
     tags = {
       left = { "plex", "music", "3", "4", "5", "6", "7", "8", "9" },
       middle = {
