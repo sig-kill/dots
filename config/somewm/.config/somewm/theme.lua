@@ -37,10 +37,11 @@ theme.wibar_height             = dpi(20)
 --theme.menu_height         = dpi(400)
 --theme.menu_width          = dpi(300)
 -- Layouts
---theme.layout_machi          = machi.get_icon()
-theme.layout_centerwork        = os.getenv("HOME") .. "/.config/somewm/theme/icons/layouts/centerwork.svg"
--- local recolor             = gears.color.recolor_image
--- theme.layout_tile         = recolor(themes_path .. "default/layouts/tilew.png", "#D7D7D7"
+local layout_icons_dir         = os.getenv("HOME") .. "/.config/somewm/theme/icons/layouts/"
+theme.layout_centerwork        = layout_icons_dir .. "centerwork.svg"
+theme.layout_vsplit            = layout_icons_dir .. "vsplit.svg"
+theme.layout_hsplit            = layout_icons_dir .. "hsplit.svg"
+theme.layout_float             = layout_icons_dir .. "float.svg"
 
 local wallpapers_path          = os.getenv("HOME") .. "/Pictures/Wallpapers/"
 theme.wallpaper                = wallpapers_path .. "wallhaven-x1z2jz.jpg"
