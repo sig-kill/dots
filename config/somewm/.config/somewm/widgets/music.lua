@@ -17,6 +17,7 @@
 local awful = require("awful")
 local beautiful = require("beautiful")
 local gears = require("gears")
+local GLib = require("lgi").GLib
 local wibox = require("wibox")
 local profile = require("profile")
 
@@ -25,6 +26,13 @@ local player = profile.media_player or "fooyin"
 local dpi = require("beautiful.xresources").apply_dpi
 
 local music = {}
+
+local progress_ratio = 0
+local last_pos_us = 0
+local track_len_us = 0
+local last_sync_us = 0
+local is_playing = false
+local progress_color = gears.color(beautiful.music_progress_bg or beautiful.bg_focus)
 
 local text_widget = wibox.widget.textbox()
 local art_widget = wibox.widget {
@@ -58,16 +66,29 @@ local text_slot = wibox.widget {
 }
 
 -- One instance per config load, shared by every screen's wibar (rc.lua builds
--- one wibar per output), hence the module-level state below.
+-- one wibar per output), hence the module-level state below. Wrapped in a
+-- background container whose bgimage paints a fill proportional to elapsed time.
 music.widget = wibox.widget {
   {
-    layout = wibox.layout.fixed.horizontal,
-    art_slot,
-    text_slot,
+    {
+      layout = wibox.layout.fixed.horizontal,
+      art_slot,
+      text_slot,
+    },
+    top    = dpi(2), -- centres the dpi(16) icon in the dpi(20) bar
+    bottom = dpi(2),
+    left   = dpi(4),
+    right  = dpi(4),
+    layout = wibox.container.margin,
   },
-  top    = dpi(2), -- centres the dpi(16) icon in the dpi(20) bar
-  bottom = dpi(2),
-  layout = wibox.container.margin,
+  bgimage = function(_, cr, width, height)
+    if progress_ratio > 0 then
+      cr:set_source(progress_color)
+      cr:rectangle(0, 0, width * progress_ratio, height)
+      cr:fill()
+    end
+  end,
+  layout = wibox.container.background,
 }
 
 -- MPRIS artUrl is a URI -- fooyin writes
@@ -96,37 +117,65 @@ end
 
 local MPRIS_FILE = (os.getenv("XDG_RUNTIME_DIR") or "/tmp") .. "/somewm-mpris"
 
--- "<status> artist - title" and the art URL, tab separated. Single quoted for
--- the shell; the tab is literal, and the parse below splits on the same byte.
-local MPRIS_FORMAT = "'<{{status}}> {{artist}} - {{title}}\t{{mpris:artUrl}}'"
+-- "<status> artist - title", art URL, position (us), and length (us), tab
+-- separated. Single quoted for the shell; the tabs are literal, and the parse
+-- below splits on the same bytes. Referencing {{position}} makes `playerctl -F`
+-- emit once per second while playing (in addition to immediate emits on seek,
+-- pause, or track change).
+local MPRIS_FORMAT = "'<{{status}}> {{artist}} - {{title}}\t{{mpris:artUrl}}\t{{position}}\t{{mpris:length}}'"
 
 local mpris_text
 local mpris_art_url
 
 -- Reads the state the follower wrote; never spawns anything, so it is cheap
--- enough to run many times a second.
+-- enough to run many times a second. Between 1-second playerctl position
+-- updates, elapsed time is interpolated monotonically on each 0.15s tick.
 local function refresh_player_state()
+  local now_us = GLib.get_monotonic_time()
   local f = io.open(MPRIS_FILE, "r")
   if f then
     local line = f:read("*l")
     f:close()
     if line and line ~= mpris_text then
       mpris_text = line
-      local meta, url = line:match("^(.-)\t(.*)$")
+      local meta, url, pos_str, len_str = line:match("^(.-)\t(.-)\t(.-)\t(.*)$")
       if not meta then
-        meta, url = line, nil
+        meta, url = line:match("^(.-)\t(.*)$")
+        if not meta then
+          meta, url = line, nil
+        end
       end
+
+      is_playing = meta:match("^<Playing>") ~= nil
+      last_pos_us = tonumber(pos_str) or 0
+      track_len_us = tonumber(len_str) or 0
+      last_sync_us = now_us
+
       text_widget:set_text(meta:gsub('<Playing>', ''):gsub('<.+>', ''))
       -- The status token is part of the streamed line, so a play/pause change
       -- redraws here even when the track stays the same. fg_focus is the
       -- theme's focused element colour -- the same one the focused tag and
       -- task text use; nil while not playing means "inherit the wibar fg".
-      text_slot:set_fg(meta:match("^<Playing>") and beautiful.fg_focus or nil)
+      text_slot:set_fg(is_playing and beautiful.fg_focus or nil)
       if url ~= mpris_art_url then
         mpris_art_url = url
         apply_art(url)
       end
     end
+  end
+
+  local current_pos_us = last_pos_us
+  if is_playing and track_len_us > 0 then
+    current_pos_us = last_pos_us + (now_us - last_sync_us)
+  end
+
+  local new_ratio = (track_len_us > 0)
+    and math.min(1, math.max(0, current_pos_us / track_len_us))
+    or 0
+
+  if new_ratio ~= progress_ratio then
+    progress_ratio = new_ratio
+    music.widget:emit_signal("widget::redraw_needed")
   end
 end
 
@@ -142,7 +191,7 @@ local function start_follow()
   awful.spawn.with_shell(
     "exec 9>'" .. MPRIS_FILE .. ".lock'; flock -n 9 || exit 0; "
     .. "while :; do playerctl -p '" .. player .. "' metadata -F --format "
-    .. MPRIS_FORMAT .. " 2>/dev/null | while IFS= read -r line; do "
+    .. MPRIS_FORMAT .. " 2>/dev/null 9>&- | while IFS= read -r line; do "
     .. "printf '%s\\n' \"$line\" > '" .. MPRIS_FILE .. ".tmp' && "
     .. "mv '" .. MPRIS_FILE .. ".tmp' '" .. MPRIS_FILE .. "'; done; "
     .. "sleep 1; done")

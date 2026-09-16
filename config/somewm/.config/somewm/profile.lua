@@ -30,8 +30,14 @@ local profiles = {
     accel_speed = -0.4,
     media_player = "%any",
     tags = {
-      left = { "chat", "cider", "3", "4", "5", "6", "7", "8", "9" },
-      middle = { "work", "2", "3", "4", "5", "6", "7", "8", "9" },
+      left = {
+        default_layout = "hsplit",
+        tags = { "chat", "cider", "3", "4", "5", "6", "7", "8", "9" },
+      },
+      middle = {
+        default_layout = "centerwork",
+        tags = { "work", "2", "3", "4", "5", "6", "7", "8", "9" },
+      },
     },
   },
   personal = {

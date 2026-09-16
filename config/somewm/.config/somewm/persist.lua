@@ -36,9 +36,16 @@ local NIL = "nil"
 -- still parse.
 local RECORDS = {
   tag = { "role", "index", "layout", "selected", "name" },
-  client = { "role", "tag", "class", "instance", "floating",
+  client = { "id", "role", "tag", "class", "instance", "floating",
              "x", "y", "width", "height", "name" },
 }
+
+local LEGACY_CLIENT_FIELDS = {
+  "role", "tag", "class", "instance", "floating",
+  "x", "y", "width", "height", "name",
+}
+local LEGACY_CLIENT_PATTERN =
+    "^" .. ("(.-)" .. SEP):rep(#LEGACY_CLIENT_FIELDS - 1) .. "(.*)$"
 
 local PATTERNS = {}
 for kind, fields in pairs(RECORDS) do
@@ -55,10 +62,20 @@ end
 
 local function parse_record(kind, rest)
   local values = { rest:match(PATTERNS[kind]) }
-  if not values[1] then return nil end
-  local record = {}
-  for i, field in ipairs(RECORDS[kind]) do record[field] = values[i] end
-  return record
+  if values[1] then
+    local record = {}
+    for i, field in ipairs(RECORDS[kind]) do record[field] = values[i] end
+    return record
+  end
+  if kind == "client" then
+    values = { rest:match(LEGACY_CLIENT_PATTERN) }
+    if values[1] then
+      local record = { id = NIL }
+      for i, field in ipairs(LEGACY_CLIENT_FIELDS) do record[field] = values[i] end
+      return record
+    end
+  end
+  return nil
 end
 
 -- `x and nil or v` would return v: `true and nil` is nil, so the `or` wins.
@@ -88,6 +105,7 @@ local DECODE = {
   end,
   client = function(f)
     return {
+      id = opt_num(f.id),
       role = f.role,
       tag = f.tag,
       class = opt(f.class),
@@ -126,6 +144,14 @@ local function read_cache()
   return data
 end
 
+-- Reverse lookup: which display role owns `screen`.
+local function role_of(screen)
+  for role, output in pairs(displays) do
+    if output.screen == screen then return role end
+  end
+  return nil
+end
+
 -- Cache fields for one client. `tag` is the first tag the client is reached
 -- through, so a client visible on several tags is stored once, under the
 -- earliest tag in `s.tags` order. Geometry is only recorded when floating.
@@ -134,6 +160,7 @@ local function client_fields(role, tag, c)
   -- windows, and encode_record would serialize that as "false" coordinates.
   local g = c.floating and c:geometry() or nil
   return {
+    id = c.id,
     role = role,
     tag = tag.name,
     class = c.class,
@@ -150,7 +177,6 @@ end
 M.save_open_windows = function()
   local f = io.open(CACHE_PATH, "w")
   if not f then return end
-  local seen = {}
   for role, output in pairs(displays) do
     local s = output.screen
     if s then
@@ -163,13 +189,26 @@ M.save_open_windows = function()
           name = tag.name,
         }))
       end
+    end
+  end
+  -- Iterate client.get() (globalconf.clients order) rather than screen/tag
+  -- order so persisted records match somewm's request::manage order on reload.
+  for _, c in ipairs(client.get()) do
+    local s = c.screen
+    local role = s and role_of(s)
+    if role then
+      local first_tag = nil
       for _, tag in ipairs(s.tags) do
-        for _, c in ipairs(tag:clients()) do
-          if not seen[c] then
-            seen[c] = true
-            f:write(encode_record("client", client_fields(role, tag, c)))
+        for _, tc in ipairs(tag:clients()) do
+          if tc == c then
+            first_tag = tag
+            break
           end
         end
+        if first_tag then break end
+      end
+      if first_tag then
+        f:write(encode_record("client", client_fields(role, first_tag, c)))
       end
     end
   end
@@ -280,6 +319,20 @@ local function class_key(class, instance)
   return (class or NIL) .. "|" .. (instance or NIL)
 end
 
+-- On hot-reload (awesome._restart), somewm preserves client_t.id across the
+-- Lua state rebuild, so a persisted id uniquely identifies the live client.
+local function effective_id(entry)
+  return awesome._restart and entry.id or nil
+end
+
+local function entry_key(entry)
+  local id = effective_id(entry)
+  if id then
+    return "id:" .. tostring(id)
+  end
+  return class_key(entry.class, entry.instance)
+end
+
 local groups = {}
 local claimed = setmetatable({}, { __mode = "k" })
 local CLAIM_TIMEOUT_S = 10
@@ -342,7 +395,7 @@ end
 
 -- Entries that can produce placement: rows with a live screen, at least one of
 -- class/instance, and not pinned by the profile (pinned windows are placed by
--- rules.lua, not restored from the cache). `key_count` counts class+instance
+-- rules.lua, not restored from the cache). `key_count` counts entry_key
 -- occurrences so the caller can spot ambiguous rows.
 local function eligible_entries(clients, key_count)
   local eligible = {}
@@ -351,14 +404,14 @@ local function eligible_entries(clients, key_count)
     if output and output.screen and (entry.class or entry.instance)
         and not pinned_spec(entry) then
       eligible[#eligible + 1] = entry
-      local key = class_key(entry.class, entry.instance)
+      local key = entry_key(entry)
       key_count[key] = (key_count[key] or 0) + 1
     end
   end
   return eligible
 end
 
--- A window whose class+instance is unique in the cache gets a ruled.client
+-- A window whose entry_key is unique in the cache gets a ruled.client
 -- rule and is placed the moment it maps. nil rule fields are simply absent, so
 -- a rule can never become a catch-all: entries with neither class nor instance
 -- were filtered out by eligible_entries.
@@ -404,7 +457,11 @@ local function add_placement_rule(entry, index)
   end
   ruled.client.append_rule {
     id = id,
-    rule = { class = entry.class, instance = entry.instance },
+    rule = {
+      id = effective_id(entry),
+      class = entry.class,
+      instance = entry.instance,
+    },
     properties = properties,
   }
 end
@@ -457,7 +514,7 @@ M.restore_windows = function()
 
   local key_count = {}
   for index, entry in ipairs(eligible_entries(data.clients, key_count)) do
-    local key = class_key(entry.class, entry.instance)
+    local key = entry_key(entry)
     if key_count[key] > 1 then
       collect_group(key, entry)
     else
@@ -472,14 +529,6 @@ end
 -----------------
 -- Tag restore --
 -----------------
-
--- Reverse lookup: which display role owns `screen`.
-local function role_of(screen)
-  for role, output in pairs(displays) do
-    if output.screen == screen then return role end
-  end
-  return nil
-end
 
 local LAYOUT_BY_NAME
 local function layout_by_name()

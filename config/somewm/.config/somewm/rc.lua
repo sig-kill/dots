@@ -127,7 +127,48 @@ end)
 -- Wallpaper --
 ---------------
 
+math.randomseed(os.time())
+math.random()
+
+local Gio = require("lgi").Gio
+
+local function pick_random_wallpaper()
+  local dir = beautiful.wallpaper_dir or (os.getenv("HOME") .. "/Pictures/Wallpapers")
+  local enumerator = Gio.File.new_for_path(dir):enumerate_children("standard::name,standard::type", 0)
+  if not enumerator then return end
+
+  local valid_exts = { jpg = true, jpeg = true, png = true, webp = true }
+  local files = {}
+  for info in function() return enumerator:next_file() end do
+    if info:get_file_type() == "REGULAR" then
+      local name = info:get_name()
+      local ext = name and name:lower():match("%.([^.]+)$")
+      if ext and valid_exts[ext] then
+        table.insert(files, dir:gsub("/+$", "") .. "/" .. name)
+      end
+    end
+  end
+
+  if #files == 0 then return end
+
+  local candidates = files
+  if #files > 1 and beautiful.wallpaper then
+    candidates = {}
+    for _, f in ipairs(files) do
+      if f ~= beautiful.wallpaper then
+        table.insert(candidates, f)
+      end
+    end
+    if #candidates == 0 then candidates = files end
+  end
+
+  beautiful.wallpaper = candidates[math.random(#candidates)]
+end
+
 local function set_wallpaper(s)
+  if not beautiful.wallpaper or not gears.filesystem.file_readable(beautiful.wallpaper) then
+    pick_random_wallpaper()
+  end
   if beautiful.wallpaper and gears.filesystem.file_readable(beautiful.wallpaper) then
     local surf = gears.surface.load_silently(beautiful.wallpaper)
     local cropped = surf and gears.surface.crop_surface {
@@ -138,15 +179,19 @@ local function set_wallpaper(s)
       screen = s,
       widget = {
         {
-          image     = cropped or beautiful.wallpaper,
-          upscale   = true,
-          downscale = true,
-          widget    = wibox.widget.imagebox,
+          image                 = cropped or beautiful.wallpaper,
+          upscale               = true,
+          downscale             = true,
+          horizontal_fit_policy = cropped and "fit" or "auto",
+          vertical_fit_policy   = cropped and "fit" or "auto",
+          widget                = wibox.widget.imagebox,
         },
-        valign = "center",
-        halign = "center",
-        tiled  = false,
-        widget = wibox.container.tile,
+        valign                  = "center",
+        halign                  = "center",
+        tiled                   = false,
+        content_fill_horizontal = true,
+        content_fill_vertical   = true,
+        widget                  = wibox.container.tile,
       }
     }
   else
@@ -154,7 +199,19 @@ local function set_wallpaper(s)
   end
 end
 
+pick_random_wallpaper()
 screen.connect_signal("request::wallpaper", set_wallpaper)
+
+gears.timer {
+  timeout   = 6 * 60 * 60,
+  autostart = true,
+  callback  = function()
+    pick_random_wallpaper()
+    for s in screen do
+      set_wallpaper(s)
+    end
+  end,
+}
 
 ------------------------
 -- Desktop decoration --
@@ -274,6 +331,64 @@ local function on_screen_geometry(s)
 end
 
 screen.connect_signal("property::geometry", on_screen_geometry)
+
+-------------------------------------------------------
+-- External Session Lock (ext-session-lock-v1) Focus --
+-------------------------------------------------------
+
+-- Prevent Lua autofocus/permissions from stealing keyboard focus while locked
+awful.permissions.add_activate_filter(function()
+  if awesome.lock_mechanism ~= nil then
+    return false
+  end
+end)
+
+-- Restore Wayland seat keyboard focus to the ext-session-lock surface
+-- after client_focus_refresh() clears deferred focus on lock startup,
+-- or if any client unmanages/focuses while locked.
+local function restore_ext_lock_focus()
+  if awesome.lock_mechanism == "ext" then
+    for s in screen do
+      if s.valid and s.output then
+        s.output.scale = s.output.scale
+      end
+    end
+  end
+end
+
+local was_ext_locked = false
+awesome.connect_signal("refresh", function()
+  local is_ext = (awesome.lock_mechanism == "ext")
+  if is_ext and not was_ext_locked then
+    was_ext_locked = true
+    for _, delay in ipairs({ 0.05, 0.20, 0.50 }) do
+      gears.timer.start_new(delay, function()
+        restore_ext_lock_focus()
+        return false
+      end)
+    end
+  elseif not is_ext and was_ext_locked then
+    was_ext_locked = false
+  end
+end)
+
+client.connect_signal("focus", function()
+  if awesome.lock_mechanism == "ext" then
+    gears.timer.start_new(0.05, function()
+      restore_ext_lock_focus()
+      return false
+    end)
+  end
+end)
+
+client.connect_signal("request::unmanage", function()
+  if awesome.lock_mechanism == "ext" then
+    gears.timer.start_new(0.05, function()
+      restore_ext_lock_focus()
+      return false
+    end)
+  end
+end)
 
 ---------------
 -- Autostart --

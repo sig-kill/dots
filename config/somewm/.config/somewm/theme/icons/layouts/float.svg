@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <!-- Background window -->
-  <rect x="8" y="20" width="36" height="36" rx="2" fill="#D7D7D7" opacity="0.85"/>
+  <rect x="8" y="20" width="36" height="36" rx="2" fill="#A6A69C" opacity="0.85"/>
   <!-- Foreground window with contrasting boundary -->
-  <rect x="20" y="8" width="36" height="36" rx="2" fill="#F6784F" stroke="#060606" stroke-width="2"/>
+  <rect x="20" y="8" width="36" height="36" rx="2" fill="#FFA066" stroke="#161414" stroke-width="2"/>
 </svg>

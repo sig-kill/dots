@@ -183,6 +183,7 @@ local globalkeys = {
     { { modkey, "Shift" },    "/",     "debug",       require('persist').save_open_windows },
     -- modkey+Shift+r (reload) is not here: it is bound to the key *release*,
     -- see the append below the keygroup block.
+    { { modkey, "Control" },  "r",     "flush tray",  function() require('widgets').systray.flush() end },
     { { modkey, "Shift" },    "q",     "quit",        awesome.quit },
     { { modkey },             "Space", "next layout", function() awful.layout.inc(1) end },
     { { modkey, "Shift" },    "Space", "prev layout", function() awful.layout.inc(-1) end },
