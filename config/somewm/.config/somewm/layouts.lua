@@ -2,8 +2,8 @@ local awful = require("awful")
 local profile = require("profile")
 local centerwork = require("layout_centerwork")
 
--- Disable jumping cursor to corner on resize
-awful.layout.suit.tile.resize_jump_to_corner = false
+-- Enable jumping cursor to corner on tile resize
+awful.layout.suit.tile.resize_jump_to_corner = true
 awful.layout.suit.floating.resize_jump_to_corner = false
 
 -------------
