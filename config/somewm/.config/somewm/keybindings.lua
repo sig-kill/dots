@@ -248,7 +248,9 @@ local clientkeys = {
     { { modkey, "Shift" }, "c", "close", function(c)
       c:kill()
     end },
-    { { modkey, "Control" }, "space", "float", awful.client.floating.toggle }
+    { { modkey, "Control" }, "space", "float", function(c)
+      c.floating = not c.floating; c:raise()
+    end }
   }
 }
 
