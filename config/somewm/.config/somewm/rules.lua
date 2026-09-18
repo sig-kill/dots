@@ -230,7 +230,22 @@ ruled.notification.connect_signal('request::rules', function()
 end)
 
 naughty.connect_signal("request::display", function(n)
-  naughty.layout.box { notification = n }
+  local box = naughty.layout.box { notification = n }
+  if box then
+    box:buttons(gears.table.join(
+      awful.button({}, 1, function()
+        local run = n.run or (n._private and n._private.run)
+        if run then
+          run()
+        else
+          n:destroy(naughty.notification_closed_reason.dismissed_by_user)
+        end
+      end),
+      awful.button({}, 3, function()
+        n:destroy(naughty.notification_closed_reason.silent)
+      end)
+    ))
+  end
 end)
 
 awesome.connect_signal("exit", function(_reason)
