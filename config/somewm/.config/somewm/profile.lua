@@ -75,6 +75,12 @@ local profiles = {
       {
         role = "bottom",
         tag = "minimeters",
+        rule = { class = "org.fooyin.fooyin", name = "Lyrics" },
+        geometry = { x = 3200, y = 1711, width = 788, height = 237 },
+      },
+      {
+        role = "bottom",
+        tag = "minimeters",
         rule = { class = "app.minimeters.MiniMeters", name = "MiniMeters" },
         geometry = { x = 3995, y = 1707, width = 825, height = 245 },
       },
