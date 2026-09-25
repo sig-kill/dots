@@ -1,4 +1,6 @@
 local awful = require("awful")
+local beautiful = require("beautiful")
+local dpi = require("beautiful.xresources").apply_dpi
 local gears = require("gears")
 local wibox = require("wibox")
 
@@ -88,7 +90,119 @@ end
 -- One instance per config load, shared by every screen's wibar (rc.lua builds
 -- one wibar per output).
 local separator = wibox.widget.textbox(" | ")
-local time_widget = wibox.widget.textclock("%a, %b %d %I:%M:%S", 1)
+local time_widget = wibox.widget {
+  wibox.widget.textclock("%a, %b %d %I:%M:%S", 1),
+  layout = wibox.container.background,
+}
+
+local calendar
+calendar = awful.widget.calendar_popup.month {
+  start_sunday  = true,
+  long_weekdays = true,
+  week_numbers  = false,
+  spacing       = dpi(5),
+  margin        = dpi(5),
+  style_month   = {
+    padding      = dpi(6),
+    bg_color     = beautiful.bg_normal,
+    border_width = beautiful.border_width,
+    border_color = beautiful.border_color_normal,
+  },
+  style_header  = {
+    padding      = dpi(3),
+    border_width = 0,
+    fg_color     = beautiful.fg_focus,
+    bg_color     = beautiful.bg_focus,
+    markup       = function(t)
+      if calendar and calendar._calendar_clicked_on then
+        return "<b>• " .. t .. " •</b>"
+      end
+      return "<b>" .. t .. "</b>"
+    end,
+  },
+  style_weekday = {
+    padding      = dpi(3),
+    border_width = 0,
+    fg_color     = beautiful.fg_focus,
+    markup       = "<b>%s</b>",
+  },
+  style_normal  = {
+    padding      = dpi(3),
+    border_width = 0,
+    fg_color     = beautiful.fg_normal,
+    bg_color     = beautiful.bg_normal,
+  },
+  style_focus   = {
+    padding      = dpi(3),
+    border_width = 0,
+    fg_color     = beautiful.fg_focus,
+    bg_color     = beautiful.bg_focus,
+    markup       = "<b>%s</b>",
+  },
+}
+
+local cal_widget = calendar:get_widget()
+local base_embed = cal_widget:get_fn_embed()
+cal_widget:set_fn_embed(function(widget, flag, date)
+  local out = base_embed(widget, flag, date)
+  if calendar._calendar_clicked_on then
+    if flag == "month" then
+      out.border_color = beautiful.border_color_active
+    elseif flag == "header" then
+      out.fg = beautiful.bg_normal
+      out.bg = beautiful.border_color_active
+    end
+  end
+  return out
+end)
+
+local function set_pinned(pinned)
+  calendar._calendar_clicked_on = pinned
+  time_widget:set_bg(pinned and beautiful.bg_focus or nil)
+  time_widget:set_fg(pinned and beautiful.border_color_active or nil)
+end
+
+local call_calendar = calendar.call_calendar
+function calendar:call_calendar(offset, position, s)
+  if (offset or 0) == 0 then
+    s = s or mouse.screen or awful.screen.focused()
+    local bar = s and s.mywibox
+    position = (bar and bar.position == "top") and "tr" or "br"
+  end
+  return call_calendar(self, offset, position, s)
+end
+
+calendar:attach(time_widget)
+time_widget.buttons = {
+  awful.button({}, 1, function()
+    if not calendar.visible or not calendar._calendar_clicked_on then
+      set_pinned(true)
+      local saved = calendar.visible and calendar.offset or 0
+      calendar.offset = 0
+      calendar:call_calendar(saved)
+      calendar.visible = true
+    else
+      set_pinned(false)
+      calendar.visible = false
+    end
+  end),
+  awful.button({}, 3, function()
+    calendar:call_calendar(0)
+  end),
+  awful.button({}, 4, function() calendar:call_calendar(-1) end),
+  awful.button({}, 5, function() calendar:call_calendar(1) end),
+}
+calendar.buttons = {
+  awful.button({}, 1, function()
+    set_pinned(false)
+    calendar.visible = false
+  end),
+  awful.button({}, 3, function()
+    calendar:call_calendar(0)
+  end),
+  awful.button({}, 4, function() calendar:call_calendar(-1) end),
+  awful.button({}, 5, function() calendar:call_calendar(1) end),
+}
 
 ------------
 -- Wibar --
