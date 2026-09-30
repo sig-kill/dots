@@ -303,17 +303,52 @@ end
 -- Idle timeout and display realignment --
 ------------------------------------------
 
--- Turn off monitors after 15 minutes of inactivity.
+-- Turn off monitors after 15 minutes of inactivity. somewm suppresses this
+-- while awesome.idle_inhibit is true (some_idle_timers_set_inhibit()).
 awesome.set_idle_timeout("dpms", 15 * 60, function()
   awesome.dpms_off()
 end)
+
+-- One function owns awesome.idle_inhibit; two sources feed it:
+--   * any MPRIS player in "Playing" state (Firefox, mpv, fooyin, ...)
+--   * any fullscreen client (games, presentations without MPRIS)
+-- Firefox's own zwp_idle_inhibitor is not enough on its own: Gecko releases
+-- it when it decides the page is in the background (a "locked-background"
+-- wake lock is treated as an unlock), which re-arms the dpms timer while the
+-- video is still playing.
+local media_playing, fullscreen_client = false, false
+
+local function apply_idle_inhibit()
+  awesome.idle_inhibit = media_playing or fullscreen_client
+end
+
+-- `--all-players status` prints one bare status line per player, and nothing
+-- when no player runs. A fork of playerctl costs ~3ms here, so this ticks at
+-- 5s rather than riding the wibar's 0.15s tick. easy_async is one-shot per
+-- call, so unlike awful.spawn.with_line_callback it leaves nothing behind
+-- across a config reload.
+gears.timer {
+  timeout = 5,
+  autostart = true,
+  call_now = true,
+  callback = function()
+    awful.spawn.easy_async("playerctl --all-players status", function(stdout)
+      local playing = stdout:find("Playing", 1, true) ~= nil
+      if playing ~= media_playing then
+        media_playing = playing
+        apply_idle_inhibit()
+      end
+    end)
+  end,
+}
 
 client.connect_signal("property::fullscreen", function()
     local dominated = false
     for _, c in ipairs(client.get()) do
         if c.fullscreen then dominated = true; break end
     end
-    awesome.idle_inhibit = dominated
+    fullscreen_client = dominated
+    apply_idle_inhibit()
 end)
 
 -- Realign pinned windows (Minimeters, Rolling Sampler) after DPMS wake.
