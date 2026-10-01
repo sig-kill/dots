@@ -196,7 +196,7 @@ M.save_open_windows = function()
   for _, c in ipairs(client.get()) do
     local s = c.screen
     local role = s and role_of(s)
-    if role then
+    if role and not c.skip_taskbar then
       local first_tag = nil
       for _, tag in ipairs(s.tags) do
         for _, tc in ipairs(tag:clients()) do

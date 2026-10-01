@@ -192,6 +192,7 @@ local globalkeys = {
   },
   { "launcher",
     { { modkey },          "Return", "open terminal", function() awful.spawn(terminal) end },
+    { { modkey },          "`",      "toggle notes",  function() require('widgets').notes.toggle() end },
     { { modkey, "Shift" }, "Return", "open app",      function() awful.spawn('rofi -show drun') end },
     { { modkey, "Control" }, "Return", "open app", function()
       awful.screen.focused().mypromptbox:run()
