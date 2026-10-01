@@ -745,22 +745,22 @@ end
 -- prints the state it starts with and then blocks until the player changes
 -- anything. The line is written tmp-then-renamed so the reader above never sees
 -- a half line. The outer loop restarts the follow when it exits, which is what
--- happens once fooyin goes away; the sleep keeps that retry off the CPU. The
--- flock is what makes a config reload (this file is re-executed) reuse the
--- running follower instead of starting a second: it is held for the follower's
--- lifetime, so the re-run bails out here.
+-- happens once fooyin goes away; the sleep keeps that retry off the CPU. Any
+-- follower from a previous config load is holding $out.lock and is killed first
+-- so format or player changes take effect on reload.
 local function start_follow()
   awful.spawn.with_shell(string.format([[
     out=%s
+    fuser -k "$out.lock" >/dev/null 2>&1
     exec 9>"$out.lock"
-    flock -n 9 || exit 0
+    flock -w 1 9 || exit 0
     rm -f "$out"
     while :; do
-      playerctl -p %s metadata -F --format %s 2>/dev/null 9>&- | while IFS= read -r line; do
+      playerctl -p %s metadata -F --format %s 2>/dev/null | while IFS= read -r line; do
         printf '%%s\n' "$line" > "$out.tmp" && mv "$out.tmp" "$out"
-      done 9>&-
+      done
       rm -f "$out"
-      sleep 1 9>&-
+      sleep 1
     done
   ]], sh_quote(MPRIS_FILE), sh_quote(player), sh_quote(MPRIS_FORMAT)))
 end
