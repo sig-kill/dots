@@ -791,6 +791,12 @@ end)
 music.widget:buttons(gears.table.join(
   awful.button({}, 1, function()
     awful.spawn.with_shell("playerctl -p " .. sh_quote(player) .. " play-pause")
+  end),
+  awful.button({}, 8, function()
+    awful.spawn.with_shell("playerctl -p " .. sh_quote(player) .. " previous")
+  end),
+  awful.button({}, 9, function()
+    awful.spawn.with_shell("playerctl -p " .. sh_quote(player) .. " next")
   end)))
 
 return music
