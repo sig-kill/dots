@@ -20,13 +20,14 @@ local tags = require("tags")
 local function assign_tag(matcher, screen_role, tag_name)
   local rule = type(matcher) == "table" and matcher
       or { class = matcher }
-  local target_screen = displays[screen_role] and displays[screen_role].screen or nil
   ruled.client.append_rule {
     id         = rule.id or rule.class or rule.name
         or rule.instance or tostring(matcher),
     rule       = rule,
     properties = {
-      screen = target_screen,
+      -- Resolved when a window maps: the screen captured at rule-build time
+      -- goes stale once its output disconnects and is re-added.
+      screen = function() return persist.screen_for(screen_role) end,
       tag    = function(c) return tags.find_tag(c.screen, tag_name) end,
     }
   }
@@ -38,7 +39,7 @@ local function pin_window(spec)
   ruled.client.append_rule {
     rule = spec.rule,
     properties = {
-      screen   = displays[spec.role] and displays[spec.role].screen or nil,
+      screen   = function() return persist.screen_for(spec.role) end,
       tag      = function(c) return tags.find_tag(c.screen, spec.tag) end,
       urgent   = false,
       floating = true,

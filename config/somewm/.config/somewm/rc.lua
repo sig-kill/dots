@@ -76,6 +76,16 @@ output.connect_signal("added", function(o)
   update_displays(o)
 end)
 
+-- A disconnected output is invalidated (only `.valid` stays readable on it), so
+-- drop the role instead of leaving a dead object behind. Readers guard against
+-- stale entries as well; this keeps `displays` honest for the ones that only
+-- compare identities.
+output.connect_signal("removed", function(o)
+  for role, current in pairs(displays) do
+    if current == o then displays[role] = nil end
+  end
+end)
+
 ------------------
 -- Wibar layout --
 ------------------

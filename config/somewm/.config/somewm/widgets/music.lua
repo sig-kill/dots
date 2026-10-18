@@ -21,6 +21,8 @@ local lgi = require("lgi")
 local cairo = lgi.cairo
 local GdkPixbuf = lgi.GdkPixbuf
 local GLib = lgi.GLib
+local Pango = lgi.Pango
+local PangoCairo = lgi.PangoCairo
 local wibox = require("wibox")
 local profile = require("profile")
 
@@ -486,6 +488,22 @@ local popup = wibox {
   widget  = popup_root,
 }
 
+-- somewm 2.1 sizes widgets in Clay and removed the textbox measurement API
+-- (`textbox:get_preferred_size`, `widget:fit`). These are the two numbers the
+-- popup needs before its wibox has a box of its own: measure the same Pango
+-- layout the textbox describes, at the screen's resolution.
+local measure_ctx = PangoCairo.font_map_get_default():create_context()
+local function text_extents(textbox, s)
+  measure_ctx:set_resolution(s.dpi or 96)
+  local layout = Pango.Layout.new(measure_ctx)
+  layout:set_font_description(beautiful.get_font(textbox:get_font() or beautiful.font))
+  layout:set_text(textbox:get_text() or "")
+  layout.width = -1 -- no wrapping: the preferred width of the line
+  layout.height = -1048576
+  local _, logical = layout:get_pixel_extents()
+  return logical.width, logical.height
+end
+
 local function update_popup_geometry(geo)
   geo = geo or last_hover_geo
   local drawable = geo and geo.drawable
@@ -500,9 +518,11 @@ local function update_popup_geometry(geo)
   local margin = dpi(5)
   local chrome_w = ((beautiful.border_width or dpi(2)) + dpi(8)) * 2
   local art_w = popup_art_slot.visible and (POPUP_ART_SZ + dpi(1) * 2 + dpi(10)) or 0
-  local title_w = popup_title_text:get_preferred_size(s)
-  local artist_w = popup_artist_row.visible and (popup_artist_text:get_preferred_size(s) + dpi(12)) or 0
-  local album_w = popup_album_row.visible and popup_album_text:get_preferred_size(s) or 0
+  local title_w, title_h = text_extents(popup_title_text, s)
+  local artist_w, artist_h = text_extents(popup_artist_text, s)
+  local album_w, album_h = text_extents(popup_album_text, s)
+  artist_w = popup_artist_row.visible and (artist_w + dpi(12)) or 0
+  album_w = popup_album_row.visible and album_w or 0
   local text_w = math.ceil(math.max(title_w, artist_w, album_w))
 
   local max_w = math.min(POPUP_MAX_W, wa.width - 2 * margin)
@@ -512,8 +532,26 @@ local function update_popup_geometry(geo)
   -- Constrain right column width so long track/artist/album lines ellipsize cleanly.
   popup_right_col.forced_width = math.max(dpi(100), width - chrome_w - art_w)
 
-  local _, fitted_h = popup_root:fit({ screen = s, dpi = s.dpi }, width, wa.height)
-  local height = clamp(math.ceil(fitted_h or dpi(108)), dpi(56), wa.height - 2 * margin)
+  -- Height used to come from the removed `popup_root:fit`; rebuild it from the
+  -- layout's own numbers: the constraint rows cap at dpi(20), the waveform is
+  -- dpi(20) plus its top margin, the art stack is the square plus its 1px frame.
+  local gap = dpi(2)
+  local cap = dpi(20)
+  local rows_h = math.min(cap, math.ceil(title_h))
+  if popup_artist_row.visible then
+    rows_h = rows_h + gap + math.min(cap, math.ceil(artist_h) + 2 * dpi(1))
+  end
+  if popup_album_row.visible then
+    rows_h = rows_h + gap + math.min(cap, math.ceil(album_h))
+  end
+  if popup_duration_section.visible then
+    local _, pos_h = text_extents(popup_pos_text, s)
+    local _, len_h = text_extents(popup_len_text, s)
+    rows_h = rows_h + gap + cap + dpi(2) + math.ceil(math.max(pos_h, len_h))
+  end
+  local content_h = math.max(POPUP_ART_SZ + dpi(2), rows_h)
+  local chrome_h = dpi(16) + 2 * (beautiful.border_width or dpi(2))
+  local height = clamp(math.ceil(content_h + chrome_h), dpi(56), wa.height - 2 * margin)
 
   local bar = s.mywibox
   local is_top = bar and bar.position == "top"

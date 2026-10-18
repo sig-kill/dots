@@ -144,10 +144,21 @@ local function read_cache()
   return data
 end
 
+-- Screen currently owned by a display role, or nil when that role's output is
+-- not connected. `displays[role]` keeps whatever object it was last handed, and
+-- an output that disconnects is invalidated: reading any property other than
+-- `valid` on it raises "invalid object". Every reader below goes through here.
+local function screen_for(role)
+  local output = displays[role]
+  if not (output and output.valid) then return nil end
+  return output.screen
+end
+M.screen_for = screen_for
+
 -- Reverse lookup: which display role owns `screen`.
 local function role_of(screen)
-  for role, output in pairs(displays) do
-    if output.screen == screen then return role end
+  for role in pairs(displays) do
+    if screen_for(role) == screen then return role end
   end
   return nil
 end
@@ -177,8 +188,8 @@ end
 M.save_open_windows = function()
   local f = io.open(CACHE_PATH, "w")
   if not f then return end
-  for role, output in pairs(displays) do
-    local s = output.screen
+  for role in pairs(displays) do
+    local s = screen_for(role)
     if s then
       for i, tag in ipairs(s.tags) do
         f:write(encode_record("tag", {
@@ -240,8 +251,7 @@ end
 -- Does `screen` own any pinned window? rc.lua asks this before realigning.
 M.screen_has_pinned_windows = function(s)
   for _, spec in ipairs(pinned) do
-    local output = displays[spec.role]
-    if output and output.screen == s then return true end
+    if screen_for(spec.role) == s then return true end
   end
   return false
 end
@@ -249,8 +259,7 @@ end
 -- Snap every pinned client back to its defined coordinates, tag and screen.
 M.align_pinned_windows = function()
   for _, spec in ipairs(pinned) do
-    local output = displays[spec.role]
-    local screen = output and output.screen
+    local screen = screen_for(spec.role)
     if screen then
       local tag = spec.tag and tags.find_tag(screen, spec.tag) or nil
       for _, c in ipairs(client.get()) do
@@ -299,8 +308,7 @@ end
 -- Apply one persisted record to a live client: screen, tag, floating geometry.
 local function apply_entry(c, entry)
   local p = placement(entry)
-  local output = displays[p.role]
-  local screen = output and output.screen
+  local screen = screen_for(p.role)
   if not (c.valid and screen) then return end
 
   c:move_to_screen(screen)
@@ -400,8 +408,7 @@ end
 local function eligible_entries(clients, key_count)
   local eligible = {}
   for _, entry in ipairs(clients) do
-    local output = displays[entry.role]
-    if output and output.screen and (entry.class or entry.instance)
+    if screen_for(entry.role) and (entry.class or entry.instance)
         and not pinned_spec(entry) then
       eligible[#eligible + 1] = entry
       local key = entry_key(entry)
@@ -420,7 +427,7 @@ end
 -- removes itself. Without that, one cached terminal kept forcing every later
 -- terminal onto the tag it was on before the last reload.
 local function add_placement_rule(entry, index)
-  local output = displays[entry.role]
+  local role = entry.role
   local id = "persisted_" .. index
 
   -- The client that consumed this rule. The property functions below run more
@@ -440,7 +447,10 @@ local function add_placement_rule(entry, index)
   local properties = {
     screen = function(c)
       if not first(c) then return nil end
-      return output and output.screen
+      -- Resolved when the window maps, not when the rule is built: the output
+      -- this role names at startup can be disconnected and replaced while the
+      -- rule waits, which would leave it holding a dead output object.
+      return screen_for(role)
     end,
     tag = function(c)
       if not first(c) then return nil end
