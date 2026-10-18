@@ -1,12 +1,11 @@
--- Centered floating notes terminal popup (`nvim ~/notes`), toggled by Super+`.
+-- Centered floating notes popup (Kate), toggled by Super+`.
 
 local awful = require("awful")
 local ruled = require("ruled")
-local profile = require("profile")
 
 local M = {}
 
-M.CLASS = "somewm.notes"
+M.CLASS = "org.kde.kate"
 
 local WIDTH_FACTOR = 0.60
 local HEIGHT_FACTOR = 0.70
@@ -49,19 +48,25 @@ local function show_on_screen(c, s)
   if c.screen ~= s then
     c:move_to_screen(s)
   end
+  c.hidden = false
+  c.minimized = false
   local t = s.selected_tag
   if t then
     c:tags({ t })
   end
-  c.hidden = false
-  c.minimized = false
   apply_geometry(c, s)
+  awful.layout.arrange(s)
   c:activate({ context = "notes", raise = true })
+  client.focus = c
+  c:raise()
 end
 
 local function hide(c)
   c.hidden = true
   c:tags({})
+  if c.screen then
+    awful.layout.arrange(c.screen)
+  end
 end
 
 function M.toggle()
@@ -71,11 +76,7 @@ function M.toggle()
   if not c then
     if spawning then return end
     spawning = true
-    local term = profile.terminal or "alacritty"
-    local cmd = string.format(
-      'PATH="$HOME/bin:$HOME/.local/bin:$HOME/.cargo/bin:$PATH" exec %s --class=%s -e nvim "$HOME/notes"',
-      term, M.CLASS
-    )
+    local cmd = 'PATH="$HOME/bin:$HOME/.local/bin:$HOME/.cargo/bin:$PATH" exec kate'
     local pid = awful.spawn.easy_async_with_shell(cmd, function()
       spawning = false
     end)
