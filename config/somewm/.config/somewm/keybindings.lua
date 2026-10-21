@@ -48,6 +48,50 @@ client.connect_signal("request::default_mousebindings", function()
   })
 end)
 
+-- HACK: work around inconsistent window dragging behavior
+local swap_pending = setmetatable({}, { __mode = "k" })
+
+screen.connect_signal("arrange", function(s)
+  swap_pending[s] = nil
+end)
+
+awful.mouse.resize.add_enter_callback(function(c)
+  if c and c.screen then
+    swap_pending[c.screen] = nil
+  end
+end, "mouse.move")
+
+client.disconnect_signal("request::geometry", awful.layout.move_handler)
+client.connect_signal("request::geometry", function(c, context)
+  if c.floating or context ~= "mouse.move" then return end
+
+  if mouse.screen ~= c.screen then
+    c.screen = mouse.screen
+  end
+
+  local s = c.screen
+  local l = s and s.selected_tag and s.selected_tag.layout or nil
+  if not s or l == awful.layout.suit.floating then return end
+
+  -- Wait for the previous swap's delayed layout.arrange() pass to update geometries
+  if swap_pending[s] then return end
+
+  local coords = mouse.coords()
+  for _, tc in ipairs(awful.client.tiled(s)) do
+    local g = tc:geometry()
+    local bw = tc.border_width or 0
+    if coords.x >= g.x - bw and coords.x < g.x + g.width + bw
+        and coords.y >= g.y - bw and coords.y < g.y + g.height + bw then
+      if tc ~= c then
+        swap_pending[s] = true
+        c:swap(tc)
+      end
+      break
+    end
+  end
+end)
+-- END HACK: work around inconsistent window dragging behavior
+
 --------------------
 -- Sloppy focus --
 --------------------
@@ -191,9 +235,10 @@ local globalkeys = {
     { { "Control", "Shift" }, "x",     "screenshot",  take_screenshot },
   },
   { "launcher",
-    { { modkey },          "Return", "open terminal", function() awful.spawn(terminal) end },
-    { { modkey },          "`",      "toggle notes",  function() require('widgets').notes.toggle() end },
-    { { modkey, "Shift" }, "Return", "open app",      function() awful.spawn('rofi -show drun') end },
+    { { modkey },          "Return", "open terminal",  function() awful.spawn(terminal) end },
+    { { modkey },          "`",      "toggle notes",   function() require('widgets').notes.toggle() end },
+    { { "Mod1" },          "Space",  "toggle fsearch", function() require('widgets').fsearch.toggle() end },
+    { { modkey, "Shift" }, "Return", "open app",       function() awful.spawn('rofi -show drun') end },
     { { modkey, "Control" }, "Return", "open app", function()
       awful.screen.focused().mypromptbox:run()
     end },

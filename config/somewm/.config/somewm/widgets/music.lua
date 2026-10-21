@@ -43,6 +43,7 @@ local BLUR_SZ = 14
 local WAVE_W, WAVE_H = 400, 40
 
 local MPRIS_FILE = (os.getenv("XDG_RUNTIME_DIR") or "/tmp") .. "/somewm-mpris"
+local ART_FILE = MPRIS_FILE .. "-art"
 local WAVE_FILE = MPRIS_FILE .. "-wave.png"
 
 -- Status, art URL, track URL, position (us), length (us), albumArtist, artist,
@@ -60,7 +61,7 @@ local progress_ratio = 0
 local last_pos_us, track_len_us, last_sync_us = 0, 0, 0
 local mpris_text, mpris_meta_key, mpris_art_url, mpris_wave_path
 local art_surface, blur_surface, wave_surface
-local wave_pending = false
+local art_pending, wave_pending = false, false
 local is_hovered, last_hover_geo = false, nil
 
 local function make_art_imagebox(size)
@@ -588,11 +589,10 @@ apply_palette()
 -- Decode cover art once via GdkPixbuf, center-crop to a square ("fill" from
 -- center), derive the 14x14 blur surface and Adaptive Pastel palette in memory,
 -- and finish previous Cairo surfaces.
-local function apply_art(url)
+local function apply_art(path)
   local old_art, old_blur = art_surface, blur_surface
   art_surface, blur_surface = nil, nil
 
-  local path = uri_to_path(url)
   local ok, pb
   if path and gears.filesystem.file_readable(path) then
     ok, pb = pcall(GdkPixbuf.Pixbuf.new_from_file_at_scale, path, POPUP_ART_SZ * 4, POPUP_ART_SZ * 4, true)
@@ -623,6 +623,22 @@ local function apply_art(url)
   finish_surface(old_art)
   finish_surface(old_blur)
   apply_palette()
+end
+
+local function request_art(url)
+  art_pending = false
+  os.remove(ART_FILE)
+  if url and url:match("^https?://") then
+    apply_art(nil)
+    art_pending = true
+    local fetch_url = url:gsub("^https?://open%.spotify%.com/image/", "https://i.scdn.co/image/")
+    local tmp = ART_FILE .. ".tmp"
+    awful.spawn.with_shell(string.format(
+      "curl -fsSL --max-time 10 %s -o %s 2>/dev/null && mv %s %s",
+      sh_quote(fetch_url), sh_quote(tmp), sh_quote(tmp), sh_quote(ART_FILE)))
+    return
+  end
+  apply_art(uri_to_path(url))
 end
 
 -- Spawn ffmpeg in the background on local tracks to render a 400x40 peak
@@ -727,7 +743,7 @@ local function refresh_player_state()
       local art_url = (has_track and url ~= "") and url or nil
       if art_url ~= mpris_art_url then
         mpris_art_url = art_url
-        apply_art(art_url)
+        request_art(art_url)
       end
 
       local wave_path = (has_track and track_len_us > 0) and uri_to_path(track_url) or nil
@@ -746,6 +762,15 @@ local function refresh_player_state()
       elseif popup.visible or is_hovered then
         show_popup()
       end
+    end
+  end
+
+  if art_pending and gears.filesystem.file_readable(ART_FILE) then
+    art_pending = false
+    apply_art(ART_FILE)
+    os.remove(ART_FILE)
+    if popup.visible or is_hovered then
+      show_popup()
     end
   end
 
