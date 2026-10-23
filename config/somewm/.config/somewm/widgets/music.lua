@@ -24,6 +24,7 @@ local GLib = lgi.GLib
 local Pango = lgi.Pango
 local PangoCairo = lgi.PangoCairo
 local wibox = require("wibox")
+local has_clay, clay = pcall(require, "wibox.clay")
 local profile = require("profile")
 
 local player = profile.media_player or "fooyin"
@@ -41,6 +42,7 @@ local POPUP_MIN_W = dpi(280)
 local POPUP_MAX_W = dpi(460)
 local BLUR_SZ = 14
 local WAVE_W, WAVE_H = 400, 40
+local WAVE_BOX_H = dpi(20)
 
 local MPRIS_FILE = (os.getenv("XDG_RUNTIME_DIR") or "/tmp") .. "/somewm-mpris"
 local ART_FILE = MPRIS_FILE .. "-art"
@@ -61,6 +63,11 @@ local progress_ratio = 0
 local last_pos_us, track_len_us, last_sync_us = 0, 0, 0
 local mpris_text, mpris_meta_key, mpris_art_url, mpris_wave_path
 local art_surface, blur_surface, wave_surface
+local popup_bg_surface, wave_bg_surface
+local popup_bg_blur, popup_bg_pal, popup_bg_w, popup_bg_h
+local wave_bg_w, wave_bg_src, wave_bg_ratio, wave_bg_playing, wave_bg_pal
+local popup_w, popup_h = POPUP_MIN_W, dpi(108)
+local wave_w = math.max(dpi(100), POPUP_MIN_W - ((beautiful.border_width or dpi(2)) + dpi(8)) * 2)
 local art_pending, wave_pending = false, false
 local is_hovered, last_hover_geo = false, nil
 
@@ -114,7 +121,7 @@ local text_slot = wibox.widget {
 
 -- One instance per config load, shared by every screen's wibar (rc.lua builds
 -- one wibar per output), hence the module-level state above. Wrapped in a
--- background container whose bgimage paints a fill proportional to elapsed time.
+-- background container that paints a fill proportional to elapsed time.
 music.widget = wibox.widget {
   {
     {
@@ -128,15 +135,35 @@ music.widget = wibox.widget {
     right  = dpi(4),
     layout = wibox.container.margin,
   },
-  bgimage = function(_, cr, width, height)
+  bgimage = not has_clay and function(_, cr, width, height)
     if progress_ratio > 0 then
       cr:set_source(progress_color)
       cr:rectangle(0, 0, width * progress_ratio, height)
       cr:fill()
     end
-  end,
+  end or nil,
   layout = wibox.container.background,
 }
+
+if has_clay and clay.describe_widget then
+  local progress_rgba = clay.solid_rgba(progress_color)
+  clay.describe_widget(music.widget, function(w)
+    local specs = clay.whole_box(w._private.widget)
+    if progress_ratio > 0 and progress_rgba then
+      local ratio = progress_ratio
+      specs = { {
+        w = "grow",
+        h = "grow",
+        fill = progress_rgba,
+        shape = function(width, height)
+          return clay.shape_ops(gears.shape.rectangle, width * ratio, height)
+        end,
+        children = specs,
+      } }
+    end
+    return { specs = specs }
+  end)
+end
 
 -------------------------------------
 -- Shell, surface & color helpers  --
@@ -374,28 +401,43 @@ local popup_album_row = wibox.widget {
 }
 
 local wave_widget = wibox.widget {
-  forced_height = dpi(20),
-  bgimage = function(_, cr, width, height)
-    if width <= 0 or height <= 0 then return end
-    local split_x = width * progress_ratio
-    local played_pat = is_playing and palette.accent_pat or palette.artist_pat
+  forced_height = WAVE_BOX_H,
+  layout        = wibox.container.background,
+}
 
-    if wave_surface then
-      local function paint_wave_slice(x, w, pat)
-        if w <= 0 then return end
-        cr:save()
-        cr:rectangle(x, 0, w, height)
-        cr:clip()
-        cr:scale(width / WAVE_W, height / WAVE_H)
-        cr:set_source(pat)
-        cr:mask_surface(wave_surface, 0, 0)
-        cr:restore()
-      end
-      paint_wave_slice(split_x, width - split_x, palette.unplayed_pat)
-      paint_wave_slice(0, split_x, played_pat)
-      return
+local function update_wave_bg()
+  local width = math.floor(wave_w or 0)
+  local height = math.floor(WAVE_BOX_H)
+  if width <= 0 or height <= 0 then return end
+  if wave_bg_surface
+    and wave_bg_w == width
+    and wave_bg_src == wave_surface
+    and wave_bg_ratio == progress_ratio
+    and wave_bg_playing == is_playing
+    and wave_bg_pal == palette
+  then
+    return
+  end
+
+  local surf = cairo.ImageSurface(cairo.Format.ARGB32, width, height)
+  local cr = cairo.Context(surf)
+  local split_x = width * progress_ratio
+  local played_pat = is_playing and palette.accent_pat or palette.artist_pat
+
+  if wave_surface then
+    local function paint_wave_slice(x, w, pat)
+      if w <= 0 then return end
+      cr:save()
+      cr:rectangle(x, 0, w, height)
+      cr:clip()
+      cr:scale(width / WAVE_W, height / WAVE_H)
+      cr:set_source(pat)
+      cr:mask_surface(wave_surface, 0, 0)
+      cr:restore()
     end
-
+    paint_wave_slice(split_x, width - split_x, palette.unplayed_pat)
+    paint_wave_slice(0, split_x, played_pat)
+  else
     -- Flat bar fallback for remote streams or while ffmpeg decodes the track.
     local bar_h = math.max(2, dpi(4))
     local y = math.floor((height - bar_h) / 2)
@@ -407,9 +449,18 @@ local wave_widget = wibox.widget {
       cr:rectangle(0, y, split_x, bar_h)
       cr:fill()
     end
-  end,
-  layout = wibox.container.background,
-}
+  end
+
+  local old = wave_bg_surface
+  wave_bg_surface = surf
+  wave_bg_w = width
+  wave_bg_src = wave_surface
+  wave_bg_ratio = progress_ratio
+  wave_bg_playing = is_playing
+  wave_bg_pal = palette
+  wave_widget:set_bgimage(surf)
+  finish_surface(old)
+end
 
 local popup_pos_text = wibox.widget.textbox("00:00")
 local popup_len_text = wibox.widget.textbox("00:00")
@@ -455,30 +506,61 @@ local popup_root = wibox.widget {
     layout  = wibox.container.margin,
   },
   border_width = beautiful.border_width or dpi(2),
-  bgimage = function(_, cr, width, height)
-    cr:set_source(palette.bg_base_pat)
-    cr:paint()
-    if blur_surface and width > 0 and height > 0 then
-      cr:save()
-      local scale = math.max(width / BLUR_SZ, height / BLUR_SZ)
-      cr:translate((width - BLUR_SZ * scale) / 2, (height - BLUR_SZ * scale) / 2)
-      cr:scale(scale, scale)
-      cr:set_source_surface(blur_surface, 0, 0)
-      local pat = cr:get_source()
-      pat:set_filter(cairo.Filter.GOOD)
-      pat:set_extend(cairo.Extend.PAD)
-      cr:paint_with_alpha(0.85)
-      cr:restore()
-
-      cr:save()
-      cr:scale(width, height)
-      cr:set_source(palette.scrim_grad)
-      cr:paint()
-      cr:restore()
-    end
-  end,
-  layout = wibox.container.background,
+  layout       = wibox.container.background,
 }
+
+local function update_popup_bg()
+  local width = math.floor(popup_w or 0)
+  local height = math.floor(popup_h or 0)
+  if not blur_surface or width <= 0 or height <= 0 then
+    if popup_bg_surface then
+      local old = popup_bg_surface
+      popup_bg_surface, popup_bg_blur = nil, nil
+      popup_root:set_bgimage(nil)
+      finish_surface(old)
+    end
+    return
+  end
+  if popup_bg_surface
+    and popup_bg_blur == blur_surface
+    and popup_bg_pal == palette
+    and popup_bg_w == width
+    and popup_bg_h == height
+  then
+    return
+  end
+
+  local surf = cairo.ImageSurface(cairo.Format.ARGB32, width, height)
+  local cr = cairo.Context(surf)
+  cr:set_source(palette.bg_base_pat)
+  cr:paint()
+
+  cr:save()
+  local scale = math.max(width / BLUR_SZ, height / BLUR_SZ)
+  cr:translate((width - BLUR_SZ * scale) / 2, (height - BLUR_SZ * scale) / 2)
+  cr:scale(scale, scale)
+  cr:set_source_surface(blur_surface, 0, 0)
+  local pat = cr:get_source()
+  pat:set_filter(cairo.Filter.GOOD)
+  pat:set_extend(cairo.Extend.PAD)
+  cr:paint_with_alpha(0.85)
+  cr:restore()
+
+  cr:save()
+  cr:scale(width, height)
+  cr:set_source(palette.scrim_grad)
+  cr:paint()
+  cr:restore()
+
+  local old = popup_bg_surface
+  popup_bg_surface = surf
+  popup_bg_blur = blur_surface
+  popup_bg_pal = palette
+  popup_bg_w = width
+  popup_bg_h = height
+  popup_root:set_bgimage(surf)
+  finish_surface(old)
+end
 
 local popup = wibox {
   ontop   = true,
@@ -531,7 +613,9 @@ local function update_popup_geometry(geo)
   local width = clamp(chrome_w + art_w + text_w, min_w, max_w)
 
   -- Constrain right column width so long track/artist/album lines ellipsize cleanly.
-  popup_right_col.forced_width = math.max(dpi(100), width - chrome_w - art_w)
+  local right_w = math.max(dpi(100), width - chrome_w - art_w)
+  popup_right_col.forced_width = right_w
+  wave_w = right_w
 
   -- Height used to come from the removed `popup_root:fit`; rebuild it from the
   -- layout's own numbers: the constraint rows cap at dpi(20), the waveform is
@@ -565,6 +649,9 @@ local function update_popup_geometry(geo)
     x = clamp(math.floor(right_x - width), wa.x + margin, max_x)
   end
 
+  popup_w, popup_h = width, height
+  update_popup_bg()
+  update_wave_bg()
   popup:set_screen(s)
   popup:geometry { x = x, y = y, width = width, height = height }
 end
@@ -574,6 +661,7 @@ end
 ---------------------------------
 
 local function apply_palette()
+  popup_root:set_bg(palette.bg_base)
   popup_root:set_border_color(palette.border)
   popup_root:set_fg(palette.album_fg)
   popup_art_frame:set_border_color(palette.art_border)
@@ -581,6 +669,10 @@ local function apply_palette()
   artist_pill_bar:set_bg(palette.accent)
   artist_pill:set_bg(palette.pill_bg)
   artist_pill:set_fg(palette.artist_fg)
+  update_popup_bg()
+  if popup.visible or is_hovered then
+    update_wave_bg()
+  end
   popup_root:emit_signal("widget::redraw_needed")
   wave_widget:emit_signal("widget::redraw_needed")
 end
@@ -648,6 +740,9 @@ local function request_waveform(path)
   wave_surface = nil
   wave_pending = false
   os.remove(WAVE_FILE)
+  if popup.visible or is_hovered then
+    update_wave_bg()
+  end
   wave_widget:emit_signal("widget::redraw_needed")
   if not path or not gears.filesystem.file_readable(path) then return end
 
@@ -753,6 +848,9 @@ local function refresh_player_state()
       end
 
       if is_playing ~= was_playing then
+        if popup.visible or is_hovered then
+          update_wave_bg()
+        end
         wave_widget:emit_signal("widget::redraw_needed")
       end
 
@@ -779,6 +877,9 @@ local function refresh_player_state()
     finish_surface(wave_surface)
     wave_surface = gears.surface.load_uncached(WAVE_FILE)
     os.remove(WAVE_FILE)
+    if popup.visible or is_hovered then
+      update_wave_bg()
+    end
     wave_widget:emit_signal("widget::redraw_needed")
   end
 
@@ -799,6 +900,9 @@ local function refresh_player_state()
 
   if new_ratio ~= progress_ratio then
     progress_ratio = new_ratio
+    if popup.visible or is_hovered then
+      update_wave_bg()
+    end
     music.widget:emit_signal("widget::redraw_needed")
     wave_widget:emit_signal("widget::redraw_needed")
   end

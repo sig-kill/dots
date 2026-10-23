@@ -4,6 +4,7 @@
 -- on which profile is active.
 --   terminal        - terminal emulator (rc.lua)
 --   accel_speed     - pointer acceleration, optional (rc.lua)
+--   screenshot      - enable Ctrl+Shift+x screenshot binding, default true (keybindings.lua)
 --   tags            - tags per display role (layouts.lua)
 --   pinned_windows  - windows pinned to a fixed geometry (rules.lua, persist.lua)
 --   wibar_config    - wibar options per display role, absent = defaults (rc.lua)
@@ -29,6 +30,7 @@ local profiles = {
     terminal = "alacritty",
     accel_speed = -0.4,
     media_player = "%any",
+    screenshot = false,
     tags = {
       left = {
         default_layout = "hsplit",

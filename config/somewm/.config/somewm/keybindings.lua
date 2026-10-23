@@ -4,6 +4,7 @@ local hotkeys_popup = require("awful.hotkeys_popup")
 -- awful.hotkeys_popup.keys (the popup shown when a matching client opens) is
 -- required by rc.lua, before this module loads.
 local ruled = require("ruled")
+local profile = require("profile")
 
 -- The modifier every binding below is built on. Exported at the bottom of this
 -- file for the taglist buttons (widgets.taglist), so no module has to read it
@@ -126,11 +127,13 @@ local function make_keys(keys)
     local group_name = group[1]
     for i = 2, #group do
       local def = group[i]
-      table.insert(result, awful.key(
-        def[1],
-        def[2],
-        def[4], { description = def[3], group = group_name }
-      ))
+      if def then
+        table.insert(result, awful.key(
+          def[1],
+          def[2],
+          def[4], { description = def[3], group = group_name }
+        ))
+      end
     end
   end
   return result
@@ -232,7 +235,7 @@ local globalkeys = {
     { { modkey },             "Space", "next layout", function() awful.layout.inc(1) end },
     { { modkey, "Shift" },    "Space", "prev layout", function() awful.layout.inc(-1) end },
     { { modkey },             "w",     "lock screen", lock_screen },
-    { { "Control", "Shift" }, "x",     "screenshot",  take_screenshot },
+    profile.screenshot ~= false and { { "Control", "Shift" }, "x", "screenshot", take_screenshot },
   },
   { "launcher",
     { { modkey },          "Return", "open terminal",  function() awful.spawn(terminal) end },

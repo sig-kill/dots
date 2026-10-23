@@ -231,7 +231,13 @@ ruled.notification.connect_signal('request::rules', function()
 end)
 
 naughty.connect_signal("request::display", function(n)
-  local box = naughty.layout.box { notification = n }
+  local box = naughty.layout.box {
+    notification = n,
+    -- HACK: work around notification background_role shrinking to w=fit inside
+    -- somewm's w=grow notification drawin slot when minimum_width is unset
+    minimum_width = 1,
+    -- END HACK: work around notification background_role shrinking to w=fit
+  }
   if box then
     box:buttons(gears.table.join(
       awful.button({}, 1, function()

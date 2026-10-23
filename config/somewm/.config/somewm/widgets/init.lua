@@ -65,7 +65,44 @@ widgets.tasklist = function(s)
       end),
       awful.button({}, 4, function() awful.client.focus.byidx(-1) end),
       awful.button({}, 5, function() awful.client.focus.byidx(1) end),
-    }
+    },
+    layout = {
+      layout = wibox.layout.ratio.horizontal,
+    },
+    widget_template = {
+      {
+        {
+          awful.widget.clienticon,
+          id     = "icon_margin_role",
+          left   = dpi(4),
+          widget = wibox.container.margin,
+        },
+        {
+          {
+            {
+              {
+                id     = "text_role",
+                widget = wibox.widget.textbox,
+              },
+              id     = "title_role",
+              widget = wibox.container.scroll.horizontal,
+            },
+            halign = "left",
+            widget = wibox.container.place,
+          },
+          id     = "text_margin_role",
+          left   = dpi(4),
+          right  = dpi(4),
+          widget = wibox.container.margin,
+        },
+        layout = wibox.layout.fixed.horizontal,
+      },
+      id              = "background_role",
+      widget          = wibox.container.background,
+      create_callback = function(self)
+        self:get_children_by_id("title_role")[1]:pause()
+      end,
+    },
   }
 end
 
@@ -100,6 +137,10 @@ calendar = awful.widget.calendar_popup.month {
   start_sunday  = true,
   long_weekdays = true,
   week_numbers  = false,
+  -- HACK: work around wibox.layout.grid ignoring homogeneous column sizing
+  -- inside a content-sized awful.popup when width is unset
+  width         = dpi(256),
+  -- END HACK: work around wibox.layout.grid ignoring homogeneous column sizing
   spacing       = dpi(5),
   margin        = dpi(5),
   style_month   = {
