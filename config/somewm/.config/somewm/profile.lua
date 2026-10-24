@@ -78,7 +78,7 @@ local profiles = {
         role = "bottom",
         tag = "minimeters",
         rule = { class = "org.fooyin.fooyin", name = "Lyrics" },
-        geometry = { x = 3200, y = 1711, width = 788, height = 237 },
+        geometry = { x = 3203, y = 1708, width = 788, height = 237 },
       },
       {
         role = "bottom",
@@ -90,25 +90,25 @@ local profiles = {
         role = "bottom",
         tag = "minimeters",
         rule = { class = "app.minimeters.MiniMeters", name = "Stereometer" },
-        geometry = { x = 4461, y = 1460, width = 361, height = 244 },
+        geometry = { x = 4461, y = 1460, width = 358, height = 244 },
       },
       {
         role = "bottom",
         tag = "minimeters",
         rule = { class = "app.minimeters.MiniMeters", name = "Waveform" },
-        geometry = { x = 3992, y = 1460, width = 467, height = 244 },
+        geometry = { x = 3993, y = 1460, width = 467, height = 244 },
       },
       {
         role = "bottom",
         tag = "minimeters",
         rule = { class = "app.minimeters.MiniMeters", name = "Spectrogram" },
-        geometry = { x = 4824, y = 1463, width = 294, height = 490 },
+        geometry = { x = 4822, y = 1460, width = 294, height = 490 },
       },
       {
         role = "bottom",
         tag = "minimeters",
         rule = { class = "Rolling Sampler", instance = "Rolling Sampler" },
-        geometry = { x = 3200, y = 1460, width = 787, height = 247 },
+        geometry = { x = 3206, y = 1460, width = 787, height = 247 },
       },
     },
     -- { command, process to look for } — started once, if not already running.

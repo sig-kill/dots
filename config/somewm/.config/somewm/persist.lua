@@ -23,6 +23,12 @@ local CACHE_PATH = os.getenv("SOMEWM_PERSIST_WINDOWS")
         and ((os.getenv("SOMEWM_TEST_STATE_DIR") or "/tmp") .. "/persist_windows"))
     or (os.getenv("HOME") .. "/.config/somewm/.persist_windows")
 
+-- Display roles left out of the cache. The bottom output holds manually
+-- arranged windows pinned by profile.pinned_windows, so its tag state and
+-- geometry are owned by the config; writing them would only produce records
+-- that restore has to discard (or that would duplicate the pins).
+local IGNORED_SAVE_ROLES = { bottom = true }
+
 local SEP = "|||"
 
 -- Serialized spelling of "no value": each record is a flat line, so a missing
@@ -190,7 +196,7 @@ M.save_open_windows = function()
   if not f then return end
   for role in pairs(displays) do
     local s = screen_for(role)
-    if s then
+    if s and not IGNORED_SAVE_ROLES[role] then
       for i, tag in ipairs(s.tags) do
         f:write(encode_record("tag", {
           role = role,
@@ -207,7 +213,7 @@ M.save_open_windows = function()
   for _, c in ipairs(client.get()) do
     local s = c.screen
     local role = s and role_of(s)
-    if role and not c.skip_taskbar then
+    if role and not IGNORED_SAVE_ROLES[role] and not c.skip_taskbar then
       local first_tag = nil
       for _, tag in ipairs(s.tags) do
         for _, tc in ipairs(tag:clients()) do
