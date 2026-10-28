@@ -7,6 +7,7 @@
 --   screenshot      - enable Ctrl+Shift+x screenshot binding, default true (keybindings.lua)
 --   tags            - tags per display role (layouts.lua)
 --   pinned_windows  - windows pinned to a fixed geometry (rules.lua, persist.lua)
+--   persisted_classes - class substrings to persist, absent = all (persist.lua)
 --   wibar_config    - wibar options per display role, absent = defaults (rc.lua)
 --   autostart       - { command, process } pairs started once (autorun.lua)
 --   hostname        - set by this module, for logs
@@ -31,6 +32,10 @@ local profiles = {
     accel_speed = -0.4,
     media_player = "%any",
     screenshot = false,
+    displays = {
+      ['P2718EC'] = 'left',
+      ['LF32TU87'] = 'middle',
+    },
     tags = {
       left = {
         default_layout = "hsplit",
@@ -45,6 +50,13 @@ local profiles = {
   personal = {
     terminal = "ghostty",
     media_player = "fooyin",
+    persisted_classes = { "firefox", "chrome" },
+    displays = {
+      ['LEN L27q-20'] = 'left',
+      ['24GL600F'] = 'right',
+      ['HP X27q'] = 'middle',
+      ['Wisecoco'] = 'bottom',
+    },
     tags = {
       left = { "plex", "music", "3", "4", "5", "6", "7", "8", "9" },
       middle = {

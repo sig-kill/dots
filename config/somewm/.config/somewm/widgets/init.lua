@@ -1,28 +1,14 @@
 local awful = require("awful")
 local beautiful = require("beautiful")
 local dpi = require("beautiful.xresources").apply_dpi
-local gears = require("gears")
 local wibox = require("wibox")
 
-local widgets = {}
-
--- Load all widgets from this directory.
-do
-  local dir = gears.filesystem.get_configuration_dir() .. "widgets"
-  if gears.filesystem.dir_readable(dir) then
-    local Gio = require("lgi").Gio
-    local enumerator = Gio.File.new_for_path(dir)
-      :enumerate_children("standard::name", Gio.FileQueryInfoFlags.NONE)
-    for info in function() return enumerator:next_file() end do
-      -- `[^.]` drops dotfiles, and the capture is the module stem.
-      local stem = info:get_name():match("^([^.].*)%.lua$")
-      if stem and stem ~= "init" then
-        widgets[stem] = require("widgets." .. stem)
-      end
-    end
-    enumerator:close()
-  end
-end
+local widgets = {
+  fsearch = require("widgets.fsearch"),
+  music   = require("widgets.music"),
+  notes   = require("widgets.notes"),
+  systray = require("widgets.systray"),
+}
 
 -----------------------------
 -- Client widget builders --
@@ -132,15 +118,13 @@ local time_widget = wibox.widget {
   layout = wibox.container.background,
 }
 
+local calendar_pinned = false
 local calendar
 calendar = awful.widget.calendar_popup.month {
   start_sunday  = true,
   long_weekdays = true,
   week_numbers  = false,
-  -- HACK: work around wibox.layout.grid ignoring homogeneous column sizing
-  -- inside a content-sized awful.popup when width is unset
   width         = dpi(256),
-  -- END HACK: work around wibox.layout.grid ignoring homogeneous column sizing
   spacing       = dpi(5),
   margin        = dpi(5),
   style_month   = {
@@ -155,7 +139,7 @@ calendar = awful.widget.calendar_popup.month {
     fg_color     = beautiful.fg_focus,
     bg_color     = beautiful.bg_focus,
     markup       = function(t)
-      if calendar and calendar._calendar_clicked_on then
+      if calendar_pinned then
         return "<b>• " .. t .. " •</b>"
       end
       return "<b>" .. t .. "</b>"
@@ -186,7 +170,7 @@ local cal_widget = calendar:get_widget()
 local base_embed = cal_widget:get_fn_embed()
 cal_widget:set_fn_embed(function(widget, flag, date)
   local out = base_embed(widget, flag, date)
-  if calendar._calendar_clicked_on then
+  if calendar_pinned then
     if flag == "month" then
       out.border_color = beautiful.border_color_active
     elseif flag == "header" then
@@ -198,25 +182,39 @@ cal_widget:set_fn_embed(function(widget, flag, date)
 end)
 
 local function set_pinned(pinned)
-  calendar._calendar_clicked_on = pinned
+  calendar_pinned = pinned
   time_widget:set_bg(pinned and beautiful.bg_focus or nil)
   time_widget:set_fg(pinned and beautiful.border_color_active or nil)
 end
 
+calendar:connect_signal("property::visible", function()
+  if not calendar.visible and calendar_pinned then
+    set_pinned(false)
+  end
+end)
+
 local call_calendar = calendar.call_calendar
 function calendar:call_calendar(offset, position, s)
-  if (offset or 0) == 0 then
-    s = s or mouse.screen or awful.screen.focused()
-    local bar = s and s.mywibox
-    position = (bar and bar.position == "top") and "tr" or "br"
-  end
+  s = s or mouse.screen or awful.screen.focused()
+  local bar = s and s.mywibox
+  position = position or ((bar and bar.position == "top") and "tr" or "br")
   return call_calendar(self, offset, position, s)
 end
 
-calendar:attach(time_widget)
+time_widget:connect_signal("mouse::enter", function()
+  if not calendar_pinned then
+    calendar:call_calendar(0)
+    calendar.visible = true
+  end
+end)
+time_widget:connect_signal("mouse::leave", function()
+  if not calendar_pinned then
+    calendar.visible = false
+  end
+end)
 time_widget.buttons = {
   awful.button({}, 1, function()
-    if not calendar.visible or not calendar._calendar_clicked_on then
+    if not calendar.visible or not calendar_pinned then
       set_pinned(true)
       local saved = calendar.visible and calendar.offset or 0
       calendar.offset = 0

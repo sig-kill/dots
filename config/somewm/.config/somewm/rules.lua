@@ -169,7 +169,7 @@ client.connect_signal("request::titlebars", function(c)
       awful.titlebar.widget.stickybutton(c),
       awful.titlebar.widget.ontopbutton(c),
       awful.titlebar.widget.closebutton(c),
-      layout = wibox.layout.fixed.horizontal()
+      layout = wibox.layout.fixed.horizontal
     },
     layout = wibox.layout.align.horizontal
   }
@@ -231,30 +231,11 @@ ruled.notification.connect_signal('request::rules', function()
 end)
 
 naughty.connect_signal("request::display", function(n)
-  local box = naughty.layout.box {
+  naughty.layout.box {
     notification = n,
     -- HACK: work around notification background_role shrinking to w=fit inside
     -- somewm's w=grow notification drawin slot when minimum_width is unset
     minimum_width = 1,
     -- END HACK: work around notification background_role shrinking to w=fit
   }
-  if box then
-    box:buttons(gears.table.join(
-      awful.button({}, 1, function()
-        local run = n.run or (n._private and n._private.run)
-        if run then
-          run()
-        else
-          n:destroy(naughty.notification_closed_reason.dismissed_by_user)
-        end
-      end),
-      awful.button({}, 3, function()
-        n:destroy(naughty.notification_closed_reason.silent)
-      end)
-    ))
-  end
-end)
-
-awesome.connect_signal("exit", function(_reason)
-  persist.save_open_windows()
 end)

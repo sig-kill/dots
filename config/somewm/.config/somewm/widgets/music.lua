@@ -44,7 +44,10 @@ local BLUR_SZ = 14
 local WAVE_W, WAVE_H = 400, 40
 local WAVE_BOX_H = dpi(20)
 
-local MPRIS_FILE = (os.getenv("XDG_RUNTIME_DIR") or "/tmp") .. "/somewm-mpris"
+local MPRIS_DIR = (os.getenv("SOMEWM_TEST_NAME") and os.getenv("SOMEWM_TEST_STATE_DIR"))
+  or os.getenv("XDG_RUNTIME_DIR")
+  or "/tmp"
+local MPRIS_FILE = MPRIS_DIR .. "/somewm-mpris"
 local ART_FILE = MPRIS_FILE .. "-art"
 local WAVE_FILE = MPRIS_FILE .. "-wave.png"
 
@@ -135,13 +138,6 @@ music.widget = wibox.widget {
     right  = dpi(4),
     layout = wibox.container.margin,
   },
-  bgimage = not has_clay and function(_, cr, width, height)
-    if progress_ratio > 0 then
-      cr:set_source(progress_color)
-      cr:rectangle(0, 0, width * progress_ratio, height)
-      cr:fill()
-    end
-  end or nil,
   layout = wibox.container.background,
 }
 
@@ -183,9 +179,9 @@ local function finish_surface(surf)
   end
 end
 
-local function pixbuf_to_surface(pb, path)
+local function pixbuf_to_surface(pb)
   if not pb or not awesome or not awesome.pixbuf_to_surface then return nil end
-  local ok, raw = pcall(awesome.pixbuf_to_surface, pb._native, path)
+  local ok, raw = pcall(awesome.pixbuf_to_surface, pb._native)
   if not ok or not raw then return nil end
   return cairo.Surface:is_type_of(raw) and raw or cairo.Surface(raw, true)
 end
@@ -673,8 +669,6 @@ local function apply_palette()
   if popup.visible or is_hovered then
     update_wave_bg()
   end
-  popup_root:emit_signal("widget::redraw_needed")
-  wave_widget:emit_signal("widget::redraw_needed")
 end
 apply_palette()
 
@@ -743,7 +737,6 @@ local function request_waveform(path)
   if popup.visible or is_hovered then
     update_wave_bg()
   end
-  wave_widget:emit_signal("widget::redraw_needed")
   if not path or not gears.filesystem.file_readable(path) then return end
 
   wave_pending = true
@@ -777,8 +770,6 @@ end
 local function show_popup(geo)
   update_time_labels(last_pos_us)
   update_popup_geometry(geo)
-  popup_root:emit_signal("widget::redraw_needed")
-  wave_widget:emit_signal("widget::redraw_needed")
   popup.visible = true
 end
 
@@ -851,7 +842,6 @@ local function refresh_player_state()
         if popup.visible or is_hovered then
           update_wave_bg()
         end
-        wave_widget:emit_signal("widget::redraw_needed")
       end
 
       if not has_track then
@@ -880,7 +870,6 @@ local function refresh_player_state()
     if popup.visible or is_hovered then
       update_wave_bg()
     end
-    wave_widget:emit_signal("widget::redraw_needed")
   end
 
   local current_pos_us = last_pos_us
@@ -904,7 +893,6 @@ local function refresh_player_state()
       update_wave_bg()
     end
     music.widget:emit_signal("widget::redraw_needed")
-    wave_widget:emit_signal("widget::redraw_needed")
   end
 end
 
@@ -933,6 +921,11 @@ local function start_follow()
 end
 
 start_follow()
+awesome.connect_signal("exit", function(restarting)
+  if not restarting then
+    awful.spawn.with_shell("fuser -k " .. sh_quote(MPRIS_FILE .. ".lock") .. " >/dev/null 2>&1")
+  end
+end)
 
 gears.timer {
   timeout = 0.15,
@@ -957,13 +950,13 @@ end)
 -- Buttons on the row, not the textbox, so the album art is clickable too.
 music.widget:buttons(gears.table.join(
   awful.button({}, 1, function()
-    awful.spawn.with_shell("playerctl -p " .. sh_quote(player) .. " play-pause")
+    awful.spawn({ "playerctl", "-p", player, "play-pause" }, false)
   end),
   awful.button({}, 8, function()
-    awful.spawn.with_shell("playerctl -p " .. sh_quote(player) .. " previous")
+    awful.spawn({ "playerctl", "-p", player, "previous" }, false)
   end),
   awful.button({}, 9, function()
-    awful.spawn.with_shell("playerctl -p " .. sh_quote(player) .. " next")
+    awful.spawn({ "playerctl", "-p", player, "next" }, false)
   end)))
 
 return music

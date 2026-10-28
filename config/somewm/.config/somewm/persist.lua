@@ -21,13 +21,28 @@ local M = {}
 local CACHE_PATH = os.getenv("SOMEWM_PERSIST_WINDOWS")
     or (os.getenv("SOMEWM_TEST_NAME")
         and ((os.getenv("SOMEWM_TEST_STATE_DIR") or "/tmp") .. "/persist_windows"))
-    or (os.getenv("HOME") .. "/.config/somewm/.persist_windows")
+    or (gears.filesystem.get_configuration_dir() .. ".persist_windows")
 
 -- Display roles left out of the cache. The bottom output holds manually
 -- arranged windows pinned by profile.pinned_windows, so its tag state and
 -- geometry are owned by the config; writing them would only produce records
 -- that restore has to discard (or that would duplicate the pins).
 local IGNORED_SAVE_ROLES = { bottom = true }
+
+-- Optional class substring allowlist from the active profile; absent persists
+-- all windows with a class or instance.
+local persisted_classes = profile.persisted_classes
+
+local function is_persisted_client(c)
+  if not (c.class or c.instance) then return false end
+  if not persisted_classes then return true end
+  local class = c.class and c.class:lower()
+  if not class then return false end
+  for _, pattern in ipairs(persisted_classes) do
+    if class:find(pattern, 1, true) then return true end
+  end
+  return false
+end
 
 local SEP = "|||"
 
@@ -45,13 +60,6 @@ local RECORDS = {
   client = { "id", "role", "tag", "class", "instance", "floating",
              "x", "y", "width", "height", "name" },
 }
-
-local LEGACY_CLIENT_FIELDS = {
-  "role", "tag", "class", "instance", "floating",
-  "x", "y", "width", "height", "name",
-}
-local LEGACY_CLIENT_PATTERN =
-    "^" .. ("(.-)" .. SEP):rep(#LEGACY_CLIENT_FIELDS - 1) .. "(.*)$"
 
 local PATTERNS = {}
 for kind, fields in pairs(RECORDS) do
@@ -72,14 +80,6 @@ local function parse_record(kind, rest)
     local record = {}
     for i, field in ipairs(RECORDS[kind]) do record[field] = values[i] end
     return record
-  end
-  if kind == "client" then
-    values = { rest:match(LEGACY_CLIENT_PATTERN) }
-    if values[1] then
-      local record = { id = NIL }
-      for i, field in ipairs(LEGACY_CLIENT_FIELDS) do record[field] = values[i] end
-      return record
-    end
   end
   return nil
 end
@@ -129,8 +129,11 @@ local DECODE = {
 -- Parse CACHE_PATH into { clients = {...}, tags = { role = { rec, ... } } }.
 -- Lines whose record type is unknown (including the old 4-field format) are
 -- ignored.
+local cached_data = nil
 local function read_cache()
+  if cached_data then return cached_data end
   local data = { clients = {}, tags = {} }
+  cached_data = data
   local f = io.open(CACHE_PATH, "r")
   if not f then return data end
   for line in f:lines() do
@@ -168,6 +171,7 @@ local function role_of(screen)
   end
   return nil
 end
+M.role_of = role_of
 
 -- Cache fields for one client. `tag` is the first tag the client is reached
 -- through, so a client visible on several tags is stored once, under the
@@ -192,6 +196,7 @@ local function client_fields(role, tag, c)
 end
 
 M.save_open_windows = function()
+  cached_data = nil
   local f = io.open(CACHE_PATH, "w")
   if not f then return end
   for role in pairs(displays) do
@@ -213,17 +218,9 @@ M.save_open_windows = function()
   for _, c in ipairs(client.get()) do
     local s = c.screen
     local role = s and role_of(s)
-    if role and not IGNORED_SAVE_ROLES[role] and not c.skip_taskbar then
-      local first_tag = nil
-      for _, tag in ipairs(s.tags) do
-        for _, tc in ipairs(tag:clients()) do
-          if tc == c then
-            first_tag = tag
-            break
-          end
-        end
-        if first_tag then break end
-      end
+    if role and not IGNORED_SAVE_ROLES[role] and not c.skip_taskbar
+        and is_persisted_client(c) then
+      local first_tag = c.first_tag
       if first_tag then
         f:write(encode_record("client", client_fields(role, first_tag, c)))
       end
@@ -264,11 +261,12 @@ end
 
 -- Snap every pinned client back to its defined coordinates, tag and screen.
 M.align_pinned_windows = function()
+  local all_clients = client.get()
   for _, spec in ipairs(pinned) do
     local screen = screen_for(spec.role)
     if screen then
       local tag = spec.tag and tags.find_tag(screen, spec.tag) or nil
-      for _, c in ipairs(client.get()) do
+      for _, c in ipairs(all_clients) do
         if c.valid and ruled.client.match(c, spec.rule) then
           if c.screen ~= screen then c:move_to_screen(screen) end
           if tag then c:tags({ tag }) end
@@ -283,13 +281,18 @@ end
 -- Run align_pinned_windows immediately, then again at PIN_REALIGN_DELAYS to
 -- handle the race where kanshi hasn't finished repositioning the output yet
 -- when the event fires.
+local realign_timers = {}
 M.schedule_pinned_realign = function()
   M.align_pinned_windows()
-  for _, delay in ipairs(PIN_REALIGN_DELAYS) do
-    gears.timer.start_new(delay, function()
-      M.align_pinned_windows()
-      return false
-    end)
+  for i, delay in ipairs(PIN_REALIGN_DELAYS) do
+    if realign_timers[i] then
+      realign_timers[i]:again()
+    else
+      realign_timers[i] = gears.timer.start_new(delay, function()
+        M.align_pinned_windows()
+        return false
+      end)
+    end
   end
 end
 
@@ -414,7 +417,7 @@ end
 local function eligible_entries(clients, key_count)
   local eligible = {}
   for _, entry in ipairs(clients) do
-    if screen_for(entry.role) and (entry.class or entry.instance)
+    if screen_for(entry.role) and is_persisted_client(entry)
         and not pinned_spec(entry) then
       eligible[#eligible + 1] = entry
       local key = entry_key(entry)
@@ -491,20 +494,26 @@ local function collect_group(key, entry)
   group.entries[#group.entries + 1] = entry
 end
 
+local claiming_armed = false
+local claim_timer = nil
 local function arm_claiming()
-  client.connect_signal("request::manage", function(c)
-    local key = class_key(c.class, c.instance)
-    local group = groups[key]
-    if not group then return end
-    group.clients[#group.clients + 1] = c
-    claim_group(key, false)
-  end)
-  client.connect_signal("property::name", function(c)
-    claim_group(class_key(c.class, c.instance), false)
-  end)
+  if not claiming_armed then
+    claiming_armed = true
+    client.connect_signal("request::manage", function(c)
+      local key = class_key(c.class, c.instance)
+      local group = groups[key]
+      if not group then return end
+      group.clients[#group.clients + 1] = c
+      claim_group(key, false)
+    end)
+    client.connect_signal("property::name", function(c)
+      claim_group(class_key(c.class, c.instance), false)
+    end)
+  end
+  if claim_timer and claim_timer.started then return end
 
   -- Returning true keeps the timer running while a group is outstanding.
-  gears.timer.start_new(CLAIM_TICK_S, function()
+  claim_timer = gears.timer.start_new(CLAIM_TICK_S, function()
     local pending = false
     for key, group in pairs(groups) do
       group.elapsed_s = group.elapsed_s + CLAIM_TICK_S
@@ -546,17 +555,6 @@ end
 -- Tag restore --
 -----------------
 
-local LAYOUT_BY_NAME
-local function layout_by_name()
-  if not LAYOUT_BY_NAME then
-    LAYOUT_BY_NAME = {}
-    for _, layout in ipairs(require("layouts").list) do
-      LAYOUT_BY_NAME[layout.name] = layout
-    end
-  end
-  return LAYOUT_BY_NAME
-end
-
 -- Recreate screen `s`'s tags from the persisted tag records — names, order,
 -- layout and selection — so runtime renames survive a reload. Returns false
 -- when nothing is persisted for this screen's role, so the caller can fall
@@ -577,7 +575,7 @@ M.restore_tags = function(s)
     any_selected = any_selected or rec.selected
     added[i] = awful.tag.add(rec.name, {
       screen = s,
-      layout = (rec.layout and layout_by_name()[rec.layout]) or layouts.list[1],
+      layout = (rec.layout and layouts.by_name[rec.layout]) or layouts.list[1],
       selected = rec.selected,
     })
   end
@@ -586,5 +584,9 @@ M.restore_tags = function(s)
   end
   return true
 end
+
+awesome.connect_signal("exit", function(_reason)
+  M.save_open_windows()
+end)
 
 return M

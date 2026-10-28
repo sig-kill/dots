@@ -21,9 +21,7 @@ function M.new(opts)
     class_set[cls] = true
   end
 
-  local popup = {
-    CLASS = classes[1],
-  }
+  local popup = {}
 
   local popup_client = nil
   local spawning = false
@@ -74,18 +72,12 @@ function M.new(opts)
       c:tags({ t })
     end
     apply_geometry(c, s)
-    awful.layout.arrange(s)
     c:activate({ context = id, raise = true })
-    client.focus = c
-    c:raise()
   end
 
   local function hide(c)
     c.hidden = true
     c:tags({})
-    if c.screen then
-      awful.layout.arrange(c.screen)
-    end
   end
 
   function popup.toggle()

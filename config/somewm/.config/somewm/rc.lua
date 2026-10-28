@@ -13,7 +13,9 @@ require("awful.autofocus")
 local autorun = require("autorun")
 local persist = require("persist")
 
-autorun.run_once('kanshi')
+if not awesome._restart then
+  autorun.run_once('kanshi')
+end
 
 local gears = require("gears")
 -- Widget and layout library
@@ -21,7 +23,6 @@ local wibox = require("wibox")
 -- Theme handling library
 local beautiful = require("beautiful")
 local menubar = require("menubar")
-local hotkeys_popup = require("awful.hotkeys_popup")
 -- Enable hotkeys help widget for VIM and other apps
 -- when client with a matching name is opened:
 require("awful.hotkeys_popup.keys")
@@ -30,9 +31,8 @@ require("awful.hotkeys_popup.keys")
 -- Theme --
 -----------
 
-beautiful.init(os.getenv("HOME") .. "/.config/somewm/theme.lua")
--- Initialize lockscreen (must be after beautiful.init)
-require("lockscreen").init()
+awful.screen.set_auto_dpi_enabled(true)
+beautiful.init(gears.filesystem.get_configuration_dir() .. "theme.lua")
 awesome.log_level = "info"
 
 ------------------------------
@@ -41,8 +41,6 @@ awesome.log_level = "info"
 
 local profile = require("profile")
 terminal = profile.terminal
-editor = os.getenv("EDITOR") or "vim"
-editor_cmd = terminal .. " -e " .. editor
 
 -- Keybindings own the modifier; required here because the taglist buttons
 -- (widgets.taglist) are built with it.
@@ -51,15 +49,7 @@ local keybindings = require('keybindings')
 -- Display role per output model, consumed by persist.lua, rules.lua and
 -- layouts.lua through the global `displays`.
 displays = {}
-local display_map = {
-  ['LEN L27q-20'] = 'left',
-  ['24GL600F'] = 'right',
-  ['HP X27q'] = 'middle',
-  ['Wisecoco'] = 'bottom',
-  -- Work
-  ['P2718EC'] = 'left',
-  ['LF32TU87'] = 'middle',
-}
+local display_map = profile.displays or {}
 
 local function update_displays(o)
   local role = display_map[o.model]
@@ -68,13 +58,7 @@ local function update_displays(o)
   end
 end
 
-for o in output do
-  update_displays(o)
-end
-
-output.connect_signal("added", function(o)
-  update_displays(o)
-end)
+output.connect_signal("added", update_displays)
 
 -- A disconnected output is invalidated (only `.valid` stays readable on it), so
 -- drop the role instead of leaving a dead object behind. Readers guard against
@@ -94,32 +78,10 @@ end)
 -- layout keyed by display role. Roles or keys left out — and profiles without
 -- the field — get the defaults: bar at the bottom with every widget shown.
 local function wibar_options(s)
-  local model = s.output and s.output.model
-  local role = model and display_map[model]
+  local role = persist.role_of(s)
   local config = profile.wibar_config or {}
   return role and config[role] or {}
 end
-
-----------
--- Menu --
-----------
-
-myawesomemenu = {
-  { "hotkeys", function()
-    hotkeys_popup.show_help(nil, awful.screen.focused())
-  end },
-  { "manual",      terminal .. " -e man awesome" },
-  { "edit config", editor_cmd .. " " .. awesome.conffile },
-  { "restart",     awesome.restart },
-  { "quit",        function() awesome.quit() end },
-}
-
-mymainmenu = awful.menu({
-  items = {
-    { "awesome",       myawesomemenu, beautiful.awesome_icon },
-    { "open terminal", terminal }
-  }
-})
 
 -- Set the terminal for applications that require it.
 menubar.utils.terminal = terminal
@@ -158,6 +120,7 @@ local function pick_random_wallpaper()
       end
     end
   end
+  enumerator:close()
 
   if #files == 0 then return end
 
@@ -298,10 +261,6 @@ require('rules')
 -----------
 
 awesome._set_keyboard_setting("numlock", true)
--- Set the layout explicitly. somewm's xkb_get_group_names() falls back to
--- human-readable keymap names ("pc+English (US)") when no RMLVO layout is
--- configured, and awful.widget.keyboardlayout cannot parse those, so the
--- wibar entry stays blank. With the layout set it returns "pc+us".
 awful.input.xkb_layout = "us"
 awful.input.tap_to_click = 1
 awful.input.keyboard_repeat_delay = 450
@@ -352,14 +311,20 @@ gears.timer {
   end,
 }
 
-client.connect_signal("property::fullscreen", function()
-    local dominated = false
-    for _, c in ipairs(client.get()) do
-        if c.fullscreen then dominated = true; break end
-    end
-    fullscreen_client = dominated
+local function update_fullscreen_inhibit()
+  local has_fullscreen = false
+  for _, c in ipairs(client.get()) do
+    if c.valid and c.fullscreen then has_fullscreen = true; break end
+  end
+  if has_fullscreen ~= fullscreen_client then
+    fullscreen_client = has_fullscreen
     apply_idle_inhibit()
-end)
+  end
+end
+
+client.connect_signal("property::fullscreen", update_fullscreen_inhibit)
+client.connect_signal("request::unmanage", update_fullscreen_inhibit)
+update_fullscreen_inhibit()
 
 -- Realign pinned windows (Minimeters, Rolling Sampler) after DPMS wake.
 -- Staggered to handle the race with kanshi re-negotiating output positions.
@@ -396,6 +361,7 @@ local function restore_ext_lock_focus()
     for s in screen do
       if s.valid and s.output then
         s.output.scale = s.output.scale
+        break
       end
     end
   end
@@ -439,4 +405,6 @@ end)
 -- Autostart --
 ---------------
 
-autorun.run()
+if not awesome._restart then
+  autorun.run()
+end

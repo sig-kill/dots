@@ -105,8 +105,6 @@ function centerwork.skip_gap(nclients, t)
   return false
 end
 
-centerwork.resize_jump_to_corner = false
-
 -- Mod4 + Right click: snap the pointer to the master border, then track the
 -- pointer until the button is released and update master_width_factor live.
 function centerwork.mouse_resize_handler(c, corner, x, y)
@@ -116,12 +114,13 @@ function centerwork.mouse_resize_handler(c, corner, x, y)
   if not t then return end
 
   local wa = s.workarea
+  local avail_w = math.max(1, wa.width - 2 * (t.gap or 0))
   local center_x = wa.x + wa.width / 2
   local cur = capi.mouse.coords()
 
   -- Calculate closest master border
   local mwfact = t.master_width_factor or 0.5
-  local half_w = math.floor((wa.width * mwfact) / 2)
+  local half_w = math.floor((avail_w * mwfact) / 2)
   local border_x = (cur.x < center_x) and (center_x - half_w) or (center_x + half_w)
 
   -- Snap X to border, preserve Y
@@ -133,7 +132,7 @@ function centerwork.mouse_resize_handler(c, corner, x, y)
     for _, btn in ipairs(m.buttons) do
       if btn then
         local dist = math.abs(m.x - center_x)
-        local new_mwfact = (2 * dist) / wa.width
+        local new_mwfact = (2 * dist) / avail_w
         new_mwfact = math.min(math.max(new_mwfact, MIN_MASTER_WIDTH_FACTOR),
           MAX_MASTER_WIDTH_FACTOR)
         t.master_width_factor = new_mwfact

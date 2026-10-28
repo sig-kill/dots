@@ -1,6 +1,4 @@
-local awful = require('awful')
-awful.screen.set_auto_dpi_enabled(true)
-
+local gears                    = require('gears')
 local dpi                      = require('beautiful.xresources').apply_dpi
 
 local theme                    = {}
@@ -29,16 +27,10 @@ theme.tasklist_bg_focus        = "#2D373C"
 theme.music_progress_bg        = "#29392D"
 theme.wibar_bg                 = "#101518"
 theme.wibar_fg                 = "#DED0B2"
---theme.wibar_border_color  = "#134141"
---theme.wibar_border_width  = dpi(1)
 theme.wibar_height             = dpi(20)
 
---theme.menu_bg             = "#060606"
---theme.menu_fg             = "#F6784F"
---theme.menu_height         = dpi(400)
---theme.menu_width          = dpi(300)
 -- Layouts
-local layout_icons_dir         = os.getenv("HOME") .. "/.config/somewm/theme/icons/layouts/"
+local layout_icons_dir         = gears.filesystem.get_configuration_dir() .. "theme/icons/layouts/"
 theme.layout_centerwork        = layout_icons_dir .. "centerwork.svg"
 theme.layout_vsplit            = layout_icons_dir .. "vsplit.svg"
 theme.layout_hsplit            = layout_icons_dir .. "hsplit.svg"

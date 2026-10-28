@@ -36,19 +36,8 @@ end
 local run_once = M.run_once
 
 local function common_autorun()
-  awful.spawn.with_shell("zsh-patina restart")
+  awful.spawn({ "zsh-patina", "restart" }, false)
   run_once("wlsunset -l 37.7 -L -121.4 -t 3500", "wlsunset")
-  -- Publish the session variables D-Bus activated clients need. Never use
-  -- --all: it copies the compositor's whole environment into the systemd user
-  -- manager and the D-Bus activation environment, so whatever shell started
-  -- somewm (test harness, agent session) leaks into every later process.
-  -- The guard also keeps a nested test compositor (somewm-client test exports
-  -- SOMEWM_TEST_NAME) from overwriting the real session's WAYLAND_DISPLAY.
-  if not os.getenv("SOMEWM_TEST_NAME") then
-    awful.spawn.with_shell(
-        "sleep 1; dbus-update-activation-environment --systemd"
-        .. " WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP=somewm")
-  end
 end
 
 M.run = function()

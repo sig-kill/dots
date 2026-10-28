@@ -3,7 +3,6 @@ local awful = require("awful")
 local hotkeys_popup = require("awful.hotkeys_popup")
 -- awful.hotkeys_popup.keys (the popup shown when a matching client opens) is
 -- required by rc.lua, before this module loads.
-local ruled = require("ruled")
 local profile = require("profile")
 
 -- The modifier every binding below is built on. Exported at the bottom of this
@@ -97,19 +96,8 @@ end)
 -- Sloppy focus --
 --------------------
 
--- Clients matching an entry here keep the focus they had when the mouse enters
--- them. Empty today: the Steam exclusion is disabled on purpose, so every
--- client (including the bottom-monitor meters) takes focus on hover.
-local focus_entry_exclusions = {
-  -- { name = "", class = "" },
-}
-
 -- Sloppy focus (application focus follows mouse)
 client.connect_signal("mouse::enter", function(c)
-  for _, rule in ipairs(focus_entry_exclusions) do
-    if ruled.client.match(c, rule) then return end
-  end
-
   c:activate { context = "mouse_enter", raise = false }
 end)
 
@@ -183,8 +171,14 @@ end
 
 -- Player start/pause. Shared by the mouse side button (mapped to
 -- Ctrl+Alt+KP_Divide, which results in XF86Ungrab) and the media key.
+local media_player = profile.media_player or "fooyin"
+
 local function play_pause_player()
-  awful.spawn.with_shell("playerctl --player=fooyin,%any play-pause || pgrep -x fooyin > /dev/null || fooyin")
+  if media_player == "fooyin" then
+    awful.spawn.with_shell("playerctl --player=fooyin,%any play-pause || pgrep -x fooyin > /dev/null || fooyin")
+  else
+    awful.spawn({ "playerctl", "-p", media_player, "play-pause" }, false)
+  end
 end
 
 local function restore_minimized_client()
@@ -242,7 +236,7 @@ local globalkeys = {
     { { modkey },          "`",      "toggle notes",   function() require('widgets').notes.toggle() end },
     { { "Mod1" },          "Space",  "toggle fsearch", function() require('widgets').fsearch.toggle() end },
     { { modkey, "Shift" }, "Return", "open app",       function() awful.spawn('rofi -show drun') end },
-    { { modkey, "Control" }, "Return", "open app", function()
+    { { modkey, "Control" }, "Return", "run prompt", function()
       awful.screen.focused().mypromptbox:run()
     end },
     { { modkey }, "x", "execute lua", run_lua_prompt },
@@ -251,13 +245,13 @@ local globalkeys = {
     { { "Control", "Mod1" }, "XF86Ungrab",    "[mouse] play/pause", play_pause_player },
     { {},                    "XF86AudioPlay", "play/pause",         play_pause_player },
     { {}, "XF86AudioStop", "stop", function()
-      awful.spawn("playerctl stop")
+      awful.spawn({ "playerctl", "-p", media_player, "stop" }, false)
     end },
     { {}, "XF86AudioPrev", "prev", function()
-      awful.spawn("playerctl previous")
+      awful.spawn({ "playerctl", "-p", media_player, "previous" }, false)
     end },
     { {}, "XF86AudioNext", "next", function()
-      awful.spawn("playerctl next")
+      awful.spawn({ "playerctl", "-p", media_player, "next" }, false)
     end },
     { {}, "XF86AudioRaiseVolume", "increase vol", function()
       awful.spawn("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+")
