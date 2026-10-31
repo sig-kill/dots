@@ -3,6 +3,9 @@ local naughty = require("naughty")
 local gears = require("gears")
 local awful = require("awful")
 local wibox = require("wibox")
+local clay = require("wibox.clay")
+local beautiful = require("beautiful")
+local dpi = require("beautiful.xresources").apply_dpi
 -- Declarative object management
 local ruled = require("ruled")
 
@@ -225,17 +228,148 @@ ruled.notification.connect_signal('request::rules', function()
     rule       = {},
     properties = {
       screen           = awful.screen.preferred,
+      position         = "top_right",
       implicit_timeout = 10,
     }
   }
 end)
 
+-- Active notification popups per screen, stacked flush against top-right.
+-- Chained `awful.popup` attachments let each box shrink-to-fit its content up
+-- to `notification_max_width` without `naughty.layout.box`'s fixed-width stack
+-- slot either cropping wide boxes off-screen or intercepting clicks to the
+-- left of narrow boxes.
+local notif_boxes = setmetatable({}, { __mode = "k" })
+
+local function relayout_notifications(s)
+  local list = notif_boxes[s]
+  if not (s and s.valid and list) then return end
+  local padding = beautiful.notification_padding or dpi(16)
+  local spacing = beautiful.notification_spacing or dpi(8)
+  for i, box in ipairs(list) do
+    if i == 1 then
+      box.honor_workarea = true
+      box.offset = { x = -padding, y = padding }
+      box.placement = awful.placement.top_right
+      box.visible = true
+    else
+      box.placement = nil
+      box.preferred_positions = "bottom"
+      box.preferred_anchors = "back"
+      box.offset = { x = 0, y = spacing }
+      box:move_next_to(list[i - 1])
+    end
+  end
+end
+
 naughty.connect_signal("request::display", function(n)
-  naughty.layout.box {
-    notification = n,
-    -- HACK: work around notification background_role shrinking to w=fit inside
-    -- somewm's w=grow notification drawin slot when minimum_width is unset
-    minimum_width = 1,
-    -- END HACK: work around notification background_role shrinking to w=fit
+  local s = n.screen or awful.screen.focused()
+  if not (s and s.valid) then return end
+
+  local padding = beautiful.notification_padding or dpi(16)
+  local max_w = math.min(
+    n.width or math.huge,
+    n.max_width or beautiful.notification_max_width or dpi(500),
+    math.max(1, s.workarea.width - 2 * padding)
+  )
+  local bw = n.border_width or beautiful.notification_border_width or dpi(1)
+  local margin = n.margin or beautiful.notification_margin or dpi(4)
+  local inner_max_w = math.max(1, max_w - 2 * bw - 2 * margin)
+
+  -- Cap and clip inner content width inside `background_role` so unbroken
+  -- tokens ellipsize at the inner margin instead of pushing the right border
+  -- past the popup box.
+  local clip = wibox.container.constraint(nil, "max", inner_max_w)
+  local base_describe = clip._clay.describe
+  clay.describe_widget(clip, function(w, ...)
+    local node = base_describe(w, ...)
+    node.clip = true
+    return node
+  end, "wibox.container.constraint")
+
+  local widget = wibox.widget {
+    {
+      {
+        {
+          {
+            naughty.widget.icon,
+            {
+              naughty.widget.title,
+              naughty.widget.message,
+              spacing = dpi(4),
+              layout  = wibox.layout.fixed.vertical,
+            },
+            fill_space = true,
+            spacing    = dpi(4),
+            layout     = wibox.layout.fixed.horizontal,
+          },
+          naughty.list.actions,
+          spacing = dpi(10),
+          layout  = wibox.layout.fixed.vertical,
+        },
+        widget = function() return clip end,
+      },
+      margins = margin,
+      widget  = wibox.container.margin,
+    },
+    id     = "background_role",
+    widget = naughty.container.background,
   }
+  awful.widget.common._set_common_property(widget, "notification", n)
+
+  local box = awful.popup {
+    screen         = s,
+    type           = "notification",
+    ontop          = true,
+    visible        = false,
+    border_width   = 0,
+    maximum_width  = max_w,
+    maximum_height = n.height or beautiful.notification_height,
+    shape          = n.shape or beautiful.notification_shape,
+    opacity        = n.opacity or beautiful.notification_opacity,
+    widget         = widget,
+  }
+  function box:get_notification() return n end
+
+  local active = true
+  local function close(reason)
+    return function()
+      if active then n:destroy(reason) end
+    end
+  end
+  box:buttons(gears.table.join(
+    awful.button({}, 1, close(naughty.notification_closed_reason.dismissed_by_user)),
+    awful.button({}, 3, close(naughty.notification_closed_reason.silent))
+  ))
+
+  notif_boxes[s] = notif_boxes[s] or {}
+  table.insert(notif_boxes[s], box)
+  relayout_notifications(s)
+
+  local on_suspend
+  local function detach()
+    if not active then return end
+    active = false
+    n:disconnect_signal("destroyed", detach)
+    n:disconnect_signal("property::suspended", on_suspend)
+    box.visible = false
+    local list = notif_boxes[s]
+    if not list then return end
+    for i, b in ipairs(list) do
+      if b == box then
+        table.remove(list, i)
+        break
+      end
+    end
+    if #list == 0 then
+      notif_boxes[s] = nil
+    else
+      relayout_notifications(s)
+    end
+  end
+  on_suspend = function(_, suspended)
+    if suspended then detach() end
+  end
+  n:connect_signal("destroyed", detach)
+  n:connect_signal("property::suspended", on_suspend)
 end)
