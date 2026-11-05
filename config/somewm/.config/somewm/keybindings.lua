@@ -229,6 +229,12 @@ local globalkeys = {
     { { modkey },             "Space", "next layout", function() awful.layout.inc(1) end },
     { { modkey, "Shift" },    "Space", "prev layout", function() awful.layout.inc(-1) end },
     { { modkey },             "w",     "lock screen", lock_screen },
+    { { modkey },             "BackSpace", "dismiss notifications", function()
+      local naughty = require("naughty")
+      for _, n in ipairs(gears.table.clone(naughty.active, false)) do
+        n:destroy(naughty.notification_closed_reason.dismissed_by_user)
+      end
+    end },
     profile.screenshot ~= false and { { "Control", "Shift" }, "x", "screenshot", take_screenshot },
   },
   { "launcher",
@@ -254,10 +260,16 @@ local globalkeys = {
       awful.spawn({ "playerctl", "-p", media_player, "next" }, false)
     end },
     { {}, "XF86AudioRaiseVolume", "increase vol", function()
-      awful.spawn("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+")
+      awful.spawn({ "wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", "5%+" }, false)
     end },
     { {}, "XF86AudioLowerVolume", "decrease vol", function()
-      awful.spawn("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-")
+      awful.spawn({ "wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", "5%-" }, false)
+    end },
+    { {}, "XF86AudioMute", "mute audio", function()
+      awful.spawn({ "wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle" }, false)
+    end },
+    { {}, "XF86AudioMicMute", "mute mic", function()
+      awful.spawn({ "wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle" }, false)
     end },
   },
   { "tags",

@@ -4,10 +4,12 @@ local dpi = require("beautiful.xresources").apply_dpi
 local wibox = require("wibox")
 
 local widgets = {
-  fsearch = require("widgets.fsearch"),
-  music   = require("widgets.music"),
-  notes   = require("widgets.notes"),
-  systray = require("widgets.systray"),
+  caffeine      = require("widgets.caffeine"),
+  fsearch       = require("widgets.fsearch"),
+  music         = require("widgets.music"),
+  notes         = require("widgets.notes"),
+  notifications = require("widgets.notifications"),
+  systray       = require("widgets.systray"),
 }
 
 -----------------------------
@@ -279,6 +281,8 @@ widgets.wibar = function(s, opts)
       horizontal_row {
         opts.tray ~= false and wibox.widget.systray(),
         opts.media ~= false and widgets.music.widget,
+        opts.notifications ~= false and widgets.notifications.widget,
+        opts.caffeine ~= false and widgets.caffeine.widget,
         opts.clock ~= false and time_widget,
         s.mylayoutbox,
       },

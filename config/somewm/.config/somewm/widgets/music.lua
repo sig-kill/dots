@@ -37,9 +37,10 @@ local music = {}
 -----------------------------------
 
 local BAR_ART_SZ = dpi(16)
+local BAR_MAX_CHARS = 50
 local POPUP_ART_SZ = dpi(88)
 local POPUP_MIN_W = dpi(280)
-local POPUP_MAX_W = dpi(460)
+local POPUP_MAX_W = dpi(600)
 local BLUR_SZ = 14
 local WAVE_W, WAVE_H = 400, 40
 local WAVE_BOX_H = dpi(20)
@@ -71,8 +72,14 @@ local popup_bg_blur, popup_bg_pal, popup_bg_w, popup_bg_h
 local wave_bg_w, wave_bg_src, wave_bg_ratio, wave_bg_playing, wave_bg_pal
 local popup_w, popup_h = POPUP_MIN_W, dpi(108)
 local wave_w = math.max(dpi(100), POPUP_MIN_W - ((beautiful.border_width or dpi(2)) + dpi(8)) * 2)
-local art_pending, wave_pending = false, false
+local art_seq, wave_seq = 0, 0
 local is_hovered, last_hover_geo = false, nil
+
+local FAST_TICK_S = 0.15
+local IDLE_TICK_S = 1.0
+local SETTLE_US = 500 * 1000
+local settled_until_us = GLib.get_monotonic_time() + 3 * 1e6
+local state_timer
 
 local function make_art_imagebox(size)
   return wibox.widget {
@@ -167,6 +174,12 @@ end
 
 local function clamp(x, lo, hi)
   return math.min(hi, math.max(lo, x))
+end
+
+local function utf8_truncate(s, max_chars)
+  if not s or #s <= max_chars then return s or "" end
+  if GLib.utf8_strlen(s, -1) <= max_chars then return s end
+  return (GLib.utf8_substring(s, 0, max_chars) or s:sub(1, max_chars)) .. "…"
 end
 
 local function sh_quote(s)
@@ -380,20 +393,13 @@ local artist_pill = wibox.widget {
 }
 
 local popup_artist_row = wibox.widget {
-  {
-    layout = wibox.layout.fixed.horizontal,
-    artist_pill,
-  },
-  strategy = "max",
-  height   = dpi(20),
-  layout   = wibox.container.constraint,
+  layout = wibox.layout.fixed.horizontal,
+  artist_pill,
 }
 
 local popup_album_row = wibox.widget {
   popup_album_text,
-  strategy = "max",
-  height   = dpi(20),
-  layout   = wibox.container.constraint,
+  layout = wibox.container.background,
 }
 
 local wave_widget = wibox.widget {
@@ -480,12 +486,7 @@ local popup_duration_section = wibox.widget {
 local popup_right_col = wibox.widget {
   layout  = wibox.layout.fixed.vertical,
   spacing = dpi(2),
-  {
-    popup_title_slot,
-    strategy = "max",
-    height   = dpi(20),
-    layout   = wibox.container.constraint,
-  },
+  popup_title_slot,
   popup_artist_row,
   popup_album_row,
   popup_duration_section,
@@ -572,12 +573,17 @@ local popup = wibox {
 -- popup needs before its wibox has a box of its own: measure the same Pango
 -- layout the textbox describes, at the screen's resolution.
 local measure_ctx = PangoCairo.font_map_get_default():create_context()
-local function text_extents(textbox, s)
+local function text_extents(textbox, s, avail_w)
   measure_ctx:set_resolution(s.dpi or 96)
   local layout = Pango.Layout.new(measure_ctx)
   layout:set_font_description(beautiful.get_font(textbox:get_font() or beautiful.font))
   layout:set_text(textbox:get_text() or "")
-  layout.width = -1 -- no wrapping: the preferred width of the line
+  if avail_w and avail_w > 0 then
+    layout.width = math.max(1, math.floor(avail_w)) * Pango.SCALE
+    layout:set_wrap(Pango.WrapMode.WORD_CHAR)
+  else
+    layout.width = -1 -- no wrapping: the preferred width of the line
+  end
   layout.height = -1048576
   local _, logical = layout:get_pixel_extents()
   return logical.width, logical.height
@@ -597,10 +603,10 @@ local function update_popup_geometry(geo)
   local margin = dpi(5)
   local chrome_w = ((beautiful.border_width or dpi(2)) + dpi(8)) * 2
   local art_w = popup_art_slot.visible and (POPUP_ART_SZ + dpi(1) * 2 + dpi(10)) or 0
-  local title_w, title_h = text_extents(popup_title_text, s)
-  local artist_w, artist_h = text_extents(popup_artist_text, s)
-  local album_w, album_h = text_extents(popup_album_text, s)
-  artist_w = popup_artist_row.visible and (artist_w + dpi(12)) or 0
+  local title_w = text_extents(popup_title_text, s)
+  local artist_raw_w = text_extents(popup_artist_text, s)
+  local album_w = text_extents(popup_album_text, s)
+  local artist_w = popup_artist_row.visible and (artist_raw_w + dpi(12)) or 0
   album_w = popup_album_row.visible and album_w or 0
   local text_w = math.ceil(math.max(title_w, artist_w, album_w))
 
@@ -608,27 +614,36 @@ local function update_popup_geometry(geo)
   local min_w = math.min(POPUP_MIN_W, max_w)
   local width = clamp(chrome_w + art_w + text_w, min_w, max_w)
 
-  -- Constrain right column width so long track/artist/album lines ellipsize cleanly.
+  -- Constrain right column and textboxes so long track/artist/album lines wrap cleanly.
   local right_w = math.max(dpi(100), width - chrome_w - art_w)
+  local artist_avail_w = math.max(dpi(60), right_w - dpi(12))
   popup_right_col.forced_width = right_w
+  popup_title_text.forced_width = right_w
+  popup_artist_text.forced_width = (artist_w > right_w) and artist_avail_w or nil
+  popup_album_text.forced_width = right_w
   wave_w = right_w
 
+  local _, title_h = text_extents(popup_title_text, s, right_w)
+  local _, artist_h = text_extents(popup_artist_text, s, artist_avail_w)
+  local _, album_h = text_extents(popup_album_text, s, right_w)
+
   -- Height used to come from the removed `popup_root:fit`; rebuild it from the
-  -- layout's own numbers: the constraint rows cap at dpi(20), the waveform is
-  -- dpi(20) plus its top margin, the art stack is the square plus its 1px frame.
+  -- layout's own numbers: each visible text row grows with its wrapped height,
+  -- the waveform is dpi(20) plus its top margin, and the art stack is the square
+  -- plus its 1px frame.
   local gap = dpi(2)
-  local cap = dpi(20)
-  local rows_h = math.min(cap, math.ceil(title_h))
+  local row_min_h = dpi(20)
+  local rows_h = math.max(row_min_h, math.ceil(title_h))
   if popup_artist_row.visible then
-    rows_h = rows_h + gap + math.min(cap, math.ceil(artist_h) + 2 * dpi(1))
+    rows_h = rows_h + gap + math.max(row_min_h, math.ceil(artist_h) + 2 * dpi(1))
   end
   if popup_album_row.visible then
-    rows_h = rows_h + gap + math.min(cap, math.ceil(album_h))
+    rows_h = rows_h + gap + math.max(row_min_h, math.ceil(album_h))
   end
   if popup_duration_section.visible then
     local _, pos_h = text_extents(popup_pos_text, s)
     local _, len_h = text_extents(popup_len_text, s)
-    rows_h = rows_h + gap + cap + dpi(2) + math.ceil(math.max(pos_h, len_h))
+    rows_h = rows_h + gap + WAVE_BOX_H + dpi(2) + gap + math.ceil(math.max(pos_h, len_h))
   end
   local content_h = math.max(POPUP_ART_SZ + dpi(2), rows_h)
   local chrome_h = dpi(16) + 2 * (beautiful.border_width or dpi(2))
@@ -711,45 +726,6 @@ local function apply_art(path)
   apply_palette()
 end
 
-local function request_art(url)
-  art_pending = false
-  os.remove(ART_FILE)
-  if url and url:match("^https?://") then
-    apply_art(nil)
-    art_pending = true
-    local fetch_url = url:gsub("^https?://open%.spotify%.com/image/", "https://i.scdn.co/image/")
-    local tmp = ART_FILE .. ".tmp"
-    awful.spawn.with_shell(string.format(
-      "curl -fsSL --max-time 10 %s -o %s 2>/dev/null && mv %s %s",
-      sh_quote(fetch_url), sh_quote(tmp), sh_quote(tmp), sh_quote(ART_FILE)))
-    return
-  end
-  apply_art(uri_to_path(url))
-end
-
--- Spawn ffmpeg in the background on local tracks to render a 400x40 peak
--- waveform PNG mask.
-local function request_waveform(path)
-  finish_surface(wave_surface)
-  wave_surface = nil
-  wave_pending = false
-  os.remove(WAVE_FILE)
-  if popup.visible or is_hovered then
-    update_wave_bg()
-  end
-  if not path or not gears.filesystem.file_readable(path) then return end
-
-  wave_pending = true
-  local tmp = WAVE_FILE .. ".tmp.png"
-  awful.spawn.with_shell(string.format(
-    "ffmpeg -y -v error -nostdin -i %s -filter_complex 'aformat=channel_layouts=mono,showwavespic=s=%dx%d:colors=white:draw=full:filter=peak' -frames:v 1 %s 2>/dev/null && mv %s %s",
-    sh_quote(path), WAVE_W, WAVE_H, sh_quote(tmp), sh_quote(tmp), sh_quote(WAVE_FILE)))
-end
-
-------------------------------------
--- MPRIS state polling & follower --
-------------------------------------
-
 local function format_duration(total_sec)
   total_sec = math.max(0, total_sec or 0)
   local h = math.floor(total_sec / 3600)
@@ -771,6 +747,93 @@ local function show_popup(geo)
   update_time_labels(last_pos_us)
   update_popup_geometry(geo)
   popup.visible = true
+end
+
+local function request_art(url)
+  art_seq = art_seq + 1
+  local seq = art_seq
+  os.remove(ART_FILE)
+  if url and url:match("^https?://") then
+    apply_art(nil)
+    local fetch_url = url:gsub("^https?://open%.spotify%.com/image/", "https://i.scdn.co/image/")
+    local tmp = ART_FILE .. ".tmp"
+    local cmd = string.format(
+      "curl -fsSL --max-time 10 %s -o %s 2>/dev/null && mv %s %s",
+      sh_quote(fetch_url), sh_quote(tmp), sh_quote(tmp), sh_quote(ART_FILE))
+    awesome.spawn({ "sh", "-c", cmd }, false, false, false, false, function(reason, code)
+      if seq == art_seq and reason == "exit" and code == 0 and gears.filesystem.file_readable(ART_FILE) then
+        apply_art(ART_FILE)
+        os.remove(ART_FILE)
+        if popup.visible or is_hovered then
+          show_popup()
+        end
+      end
+    end)
+    return
+  end
+  apply_art(uri_to_path(url))
+end
+
+-- Spawn ffmpeg in the background on local tracks to render a 400x40 peak
+-- waveform PNG mask.
+local function request_waveform(path)
+  wave_seq = wave_seq + 1
+  local seq = wave_seq
+  finish_surface(wave_surface)
+  wave_surface = nil
+  os.remove(WAVE_FILE)
+  if popup.visible or is_hovered then
+    update_wave_bg()
+  end
+  if not path or not gears.filesystem.file_readable(path) then return end
+
+  local tmp = WAVE_FILE .. ".tmp.png"
+  local cmd = string.format(
+    "ffmpeg -y -v error -nostdin -i %s -filter_complex 'aformat=channel_layouts=mono,showwavespic=s=%dx%d:colors=white:draw=full:filter=peak' -frames:v 1 %s 2>/dev/null && mv %s %s",
+    sh_quote(path), WAVE_W, WAVE_H, sh_quote(tmp), sh_quote(tmp), sh_quote(WAVE_FILE))
+  awesome.spawn({ "sh", "-c", cmd }, false, false, false, false, function(reason, code)
+    if seq == wave_seq and reason == "exit" and code == 0 and gears.filesystem.file_readable(WAVE_FILE) then
+      finish_surface(wave_surface)
+      wave_surface = gears.surface.load_uncached(WAVE_FILE)
+      os.remove(WAVE_FILE)
+      if popup.visible or is_hovered then
+        update_wave_bg()
+      end
+    end
+  end)
+end
+
+------------------------------------
+-- MPRIS state polling & follower --
+------------------------------------
+
+local function sync_timer_state(now_us)
+  if not state_timer then return end
+  if is_playing or now_us < settled_until_us then
+    if state_timer.timeout ~= FAST_TICK_S then
+      state_timer.timeout = FAST_TICK_S
+      if state_timer.started then
+        state_timer:again()
+      end
+    end
+    if not state_timer.started then
+      state_timer:start()
+    end
+  elseif dbus ~= nil then
+    if state_timer.started then
+      state_timer:stop()
+    end
+  else
+    if state_timer.timeout ~= IDLE_TICK_S then
+      state_timer.timeout = IDLE_TICK_S
+      if state_timer.started then
+        state_timer:again()
+      end
+    end
+    if not state_timer.started then
+      state_timer:start()
+    end
+  end
 end
 
 -- Reads the state the follower wrote; never spawns anything on normal ticks,
@@ -811,7 +874,7 @@ local function refresh_player_state()
       local display_title = title ~= "" and title or primary_artist
       local display_artist = title ~= "" and (album_artist ~= "" and album_artist or artist) or ""
       local bar_text = (primary_artist ~= "" and title ~= "") and (primary_artist .. " - " .. title) or display_title
-      text_widget:set_text(has_track and bar_text or "")
+      text_widget:set_text(has_track and utf8_truncate(bar_text, BAR_MAX_CHARS) or "")
       -- fg_focus is the theme's focused element colour -- the same one the
       -- focused tag and task text use; nil while not playing means "inherit
       -- the wibar fg".
@@ -853,25 +916,6 @@ local function refresh_player_state()
     end
   end
 
-  if art_pending and gears.filesystem.file_readable(ART_FILE) then
-    art_pending = false
-    apply_art(ART_FILE)
-    os.remove(ART_FILE)
-    if popup.visible or is_hovered then
-      show_popup()
-    end
-  end
-
-  if wave_pending and gears.filesystem.file_readable(WAVE_FILE) then
-    wave_pending = false
-    finish_surface(wave_surface)
-    wave_surface = gears.surface.load_uncached(WAVE_FILE)
-    os.remove(WAVE_FILE)
-    if popup.visible or is_hovered then
-      update_wave_bg()
-    end
-  end
-
   local current_pos_us = last_pos_us
   if is_playing and track_len_us > 0 then
     current_pos_us = math.min(track_len_us, last_pos_us + (now_us - last_sync_us))
@@ -894,6 +938,8 @@ local function refresh_player_state()
     end
     music.widget:emit_signal("widget::redraw_needed")
   end
+
+  sync_timer_state(now_us)
 end
 
 -- Stream the player state into MPRIS_FILE, one line per MPRIS change: `--follow`
@@ -927,12 +973,30 @@ awesome.connect_signal("exit", function(restarting)
   end
 end)
 
-gears.timer {
-  timeout = 0.15,
+state_timer = gears.timer {
+  timeout = FAST_TICK_S,
   call_now = true,
   autostart = true,
   callback = refresh_player_state,
 }
+
+local function wake_timer()
+  settled_until_us = math.max(settled_until_us, GLib.get_monotonic_time() + SETTLE_US)
+  if state_timer then
+    if state_timer.timeout ~= FAST_TICK_S then
+      state_timer.timeout = FAST_TICK_S
+      if state_timer.started then
+        state_timer:again()
+      end
+    end
+    if not state_timer.started then
+      state_timer:start()
+    end
+  end
+  refresh_player_state()
+end
+
+awesome.connect_signal("mpris::activity", wake_timer)
 
 music.widget:connect_signal("mouse::enter", function(_, geo)
   is_hovered = true
@@ -951,12 +1015,15 @@ end)
 music.widget:buttons(gears.table.join(
   awful.button({}, 1, function()
     awful.spawn({ "playerctl", "-p", player, "play-pause" }, false)
+    wake_timer()
   end),
   awful.button({}, 8, function()
     awful.spawn({ "playerctl", "-p", player, "previous" }, false)
+    wake_timer()
   end),
   awful.button({}, 9, function()
     awful.spawn({ "playerctl", "-p", player, "next" }, false)
+    wake_timer()
   end)))
 
 return music

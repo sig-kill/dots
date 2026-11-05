@@ -138,38 +138,133 @@ local function pick_random_wallpaper()
   beautiful.wallpaper = candidates[math.random(#candidates)]
 end
 
+local wallpaper_cache = { path = nil, source = nil, crops = {}, used_source = false }
+local retired_surfaces = {}
+local screen_wallpapers = setmetatable({}, { __mode = "k" })
+local cleanup_scheduled = false
+
+local function finish_surface(surf)
+  if surf and surf.finish then
+    pcall(surf.finish, surf)
+  end
+end
+
+local function schedule_wallpaper_cleanup()
+  if cleanup_scheduled then return end
+  cleanup_scheduled = true
+  gears.timer.delayed_call(function()
+    cleanup_scheduled = false
+    for surf in pairs(retired_surfaces) do
+      finish_surface(surf)
+      retired_surfaces[surf] = nil
+    end
+    if wallpaper_cache.source and not wallpaper_cache.used_source then
+      finish_surface(wallpaper_cache.source)
+      wallpaper_cache.source = nil
+    end
+  end)
+end
+
+local function retire_wallpaper_cache()
+  if wallpaper_cache.source then
+    retired_surfaces[wallpaper_cache.source] = true
+  end
+  for _, surf in pairs(wallpaper_cache.crops) do
+    retired_surfaces[surf] = true
+  end
+  wallpaper_cache = { path = nil, source = nil, crops = {}, used_source = false }
+  schedule_wallpaper_cleanup()
+end
+
+local function wallpaper_surface_for(s)
+  local path = beautiful.wallpaper
+  if not path or not gears.filesystem.file_readable(path) then
+    return nil
+  end
+  if wallpaper_cache.path ~= path then
+    retire_wallpaper_cache()
+    wallpaper_cache.path = path
+  end
+
+  local geo = s.geometry
+  if not geo or geo.width <= 0 or geo.height <= 0 then return nil end
+  local ratio = geo.width / geo.height
+  local ratio_key = math.floor(ratio * 10000 + 0.5)
+
+  local cached = wallpaper_cache.crops[ratio_key]
+  if cached then
+    return cached
+  end
+
+  local src = wallpaper_cache.source
+  if not src then
+    src = gears.surface.load_uncached_silently(path)
+    if not src then return nil end
+    wallpaper_cache.source = src
+    schedule_wallpaper_cleanup()
+  end
+
+  local w, h = gears.surface.get_size(src)
+  if w <= 0 or h <= 0 then return nil end
+
+  -- If the source aspect ratio already matches the screen, share `src` directly
+  -- instead of allocating and painting a duplicate full-resolution surface.
+  local crop_w, crop_h = w, h
+  local prev_ratio = w / h
+  if prev_ratio < ratio then
+    crop_h = math.ceil(w * (1 / ratio))
+  elseif prev_ratio > ratio then
+    crop_w = math.ceil(h * ratio)
+  end
+
+  local result
+  if crop_w == w and crop_h == h then
+    result = src
+    wallpaper_cache.used_source = true
+  else
+    result = gears.surface.crop_surface { surface = src, ratio = ratio }
+  end
+
+  wallpaper_cache.crops[ratio_key] = result
+  return result
+end
+
 local function set_wallpaper(s)
   if not beautiful.wallpaper or not gears.filesystem.file_readable(beautiful.wallpaper) then
     pick_random_wallpaper()
   end
-  if beautiful.wallpaper and gears.filesystem.file_readable(beautiful.wallpaper) then
-    local surf = gears.surface.load_silently(beautiful.wallpaper)
-    local cropped = surf and gears.surface.crop_surface {
-      surface = surf,
-      ratio   = s.geometry.width / s.geometry.height,
-    }
-    awful.wallpaper {
+  local surf = wallpaper_surface_for(s)
+  local entry = screen_wallpapers[s]
+  if entry then
+    if entry.surface ~= surf then
+      entry.surface = surf
+      entry.imagebox:set_image(surf)
+    end
+    return
+  end
+
+  local ib = wibox.widget {
+    image     = surf,
+    upscale   = true,
+    downscale = true,
+    widget    = wibox.widget.imagebox,
+  }
+  screen_wallpapers[s] = {
+    surface   = surf,
+    imagebox  = ib,
+    wallpaper = awful.wallpaper {
       screen = s,
+      bg     = beautiful.bg_normal or "#060606",
       widget = {
-        {
-          image                 = cropped or beautiful.wallpaper,
-          upscale               = true,
-          downscale             = true,
-          horizontal_fit_policy = cropped and "fit" or "auto",
-          vertical_fit_policy   = cropped and "fit" or "auto",
-          widget                = wibox.widget.imagebox,
-        },
+        ib,
         valign                  = "center",
         halign                  = "center",
-        tiled                   = false,
         content_fill_horizontal = true,
         content_fill_vertical   = true,
-        widget                  = wibox.container.tile,
-      }
-    }
-  else
-    awful.wallpaper { screen = s, bg = beautiful.bg_normal or "#060606" }
-  end
+        widget                  = wibox.container.place,
+      },
+    },
+  }
 end
 
 pick_random_wallpaper()
@@ -278,7 +373,8 @@ awesome.set_idle_timeout("dpms", 15 * 60, function()
   awesome.dpms_off()
 end)
 
--- One function owns awesome.idle_inhibit; two sources feed it:
+-- One function owns awesome.idle_inhibit; three sources feed it:
+--   * manual caffeine lock from the wibar indicator (widgets.caffeine)
 --   * any MPRIS player in "Playing" state (Firefox, mpv, fooyin, ...)
 --   * any fullscreen client (games, presentations without MPRIS)
 -- Firefox's own zwp_idle_inhibitor is not enough on its own: Gecko releases
@@ -288,28 +384,95 @@ end)
 local media_playing, fullscreen_client = false, false
 
 local function apply_idle_inhibit()
-  awesome.idle_inhibit = media_playing or fullscreen_client
+  local manual_inhibit = widgets.caffeine and widgets.caffeine.manual or false
+  awesome.idle_inhibit = manual_inhibit or media_playing or fullscreen_client
+  if widgets.caffeine then
+    widgets.caffeine.set_sources(media_playing, fullscreen_client)
+  end
 end
 
+awesome.connect_signal("caffeine::changed", apply_idle_inhibit)
+awesome.connect_signal("property::idle_inhibited", function()
+  if widgets.caffeine then
+    widgets.caffeine.update()
+  end
+end)
+apply_idle_inhibit()
+
 -- `--all-players status` prints one bare status line per player, and nothing
--- when no player runs. A fork of playerctl costs ~3ms here, so this ticks at
--- 5s rather than riding the wibar's 0.15s tick. easy_async is one-shot per
--- call, so unlike awful.spawn.with_line_callback it leaves nothing behind
--- across a config reload.
-gears.timer {
-  timeout = 5,
-  autostart = true,
-  call_now = true,
-  callback = function()
-    awful.spawn.easy_async("playerctl --all-players status", function(stdout)
-      local playing = stdout:find("Playing", 1, true) ~= nil
-      if playing ~= media_playing then
-        media_playing = playing
-        apply_idle_inhibit()
+-- when no player runs. Driven by D-Bus PropertiesChanged / NameOwnerChanged
+-- signals on org.mpris.MediaPlayer2.* so playerctl is only spawned on actual
+-- playback or bus-owner transitions (with a 5s timer fallback if dbus is absent).
+local mpris_check_running = false
+local mpris_check_queued = false
+
+local function check_mpris_playing()
+  if mpris_check_running then
+    mpris_check_queued = true
+    return
+  end
+  mpris_check_running = true
+  awful.spawn.easy_async({ "playerctl", "--all-players", "status" }, function(stdout)
+    mpris_check_running = false
+    local playing = (stdout or ""):find("Playing", 1, true) ~= nil
+    if playing ~= media_playing then
+      media_playing = playing
+      apply_idle_inhibit()
+    end
+    if mpris_check_queued then
+      mpris_check_queued = false
+      check_mpris_playing()
+    end
+  end)
+end
+
+if dbus then
+  local MATCH_MPRIS_PROPS = "type='signal',path='/org/mpris/MediaPlayer2',"
+    .. "interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',"
+    .. "arg0='org.mpris.MediaPlayer2.Player'"
+  local MATCH_MPRIS_OWNER = "type='signal',sender='org.freedesktop.DBus',"
+    .. "interface='org.freedesktop.DBus',member='NameOwnerChanged',"
+    .. "arg0namespace='org.mpris.MediaPlayer2'"
+
+  dbus.add_match("session", MATCH_MPRIS_PROPS)
+  dbus.add_match("session", MATCH_MPRIS_OWNER)
+
+  dbus.connect_signal("org.freedesktop.DBus.Properties", function(data, iface, changed)
+    if data.path == "/org/mpris/MediaPlayer2"
+        and iface == "org.mpris.MediaPlayer2.Player"
+        and type(changed) == "table" then
+      if changed.PlaybackStatus ~= nil then
+        check_mpris_playing()
       end
-    end)
-  end,
-}
+      awesome.emit_signal("mpris::activity")
+    end
+  end)
+
+  dbus.connect_signal("org.freedesktop.DBus", function(data, name, old_owner, new_owner)
+    if data.member == "NameOwnerChanged"
+        and type(name) == "string"
+        and name:find("^org%.mpris%.MediaPlayer2%.") then
+      if (new_owner == "" and media_playing) or (old_owner == "" and not media_playing) then
+        check_mpris_playing()
+      end
+      awesome.emit_signal("mpris::activity")
+    end
+  end)
+
+  awesome.connect_signal("exit", function()
+    dbus.remove_match("session", MATCH_MPRIS_PROPS)
+    dbus.remove_match("session", MATCH_MPRIS_OWNER)
+  end)
+
+  check_mpris_playing()
+else
+  gears.timer {
+    timeout   = 5,
+    autostart = true,
+    call_now  = true,
+    callback  = check_mpris_playing,
+  }
+end
 
 local function update_fullscreen_inhibit()
   local has_fullscreen = false

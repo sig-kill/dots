@@ -77,8 +77,8 @@ local profiles = {
     wibar_config = {
       left   = { position = "top" },
       middle = { position = "top" },
-      bottom = { position = "top", tray = false, clock = false },
-      right  = { position = "bottom", tray = false, media = false },
+      bottom = { position = "top", tray = false, caffeine = false, notifications = false, clock = false },
+      right  = { position = "bottom", tray = false, media = false, caffeine = false, notifications = false },
     },
     -- Windows pinned to a fixed geometry: `role` is the display role that owns
     -- the window, `tag` the tag base name on that screen (see tags.find_tag).

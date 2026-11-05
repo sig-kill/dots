@@ -332,15 +332,41 @@ naughty.connect_signal("request::display", function(n)
   function box:get_notification() return n end
 
   local active = true
-  local function close(reason)
-    return function()
-      if active then n:destroy(reason) end
-    end
-  end
   box:buttons(gears.table.join(
-    awful.button({}, 1, close(naughty.notification_closed_reason.dismissed_by_user)),
-    awful.button({}, 3, close(naughty.notification_closed_reason.silent))
+    awful.button({}, 1, function()
+      if not active then return end
+      local run = n.run or (n._private and n._private.run)
+      if run then
+        run()
+      else
+        n:destroy(naughty.notification_closed_reason.dismissed_by_user)
+      end
+    end),
+    awful.button({}, 2, function()
+      if not active then return end
+      for _, notif in ipairs(gears.table.clone(naughty.active, false)) do
+        notif:destroy(naughty.notification_closed_reason.dismissed_by_user)
+      end
+    end),
+    awful.button({}, 3, function()
+      if active then n:destroy(naughty.notification_closed_reason.silent) end
+    end)
   ))
+
+  box:connect_signal("mouse::enter", function()
+    if not active then return end
+    rawset(n, "auto_reset_timeout", false)
+    if n.timer and n.timer.started then
+      n.timer:stop()
+    end
+  end)
+  box:connect_signal("mouse::leave", function()
+    if not active then return end
+    rawset(n, "auto_reset_timeout", nil)
+    if not n._private.is_destroyed and not n.suspended and (n.timeout or 0) > 0 then
+      n:reset_timeout(n.hover_timeout)
+    end
+  end)
 
   notif_boxes[s] = notif_boxes[s] or {}
   table.insert(notif_boxes[s], box)
