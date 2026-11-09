@@ -90,13 +90,13 @@ local profiles = {
         role = "bottom",
         tag = "minimeters",
         rule = { class = "org.fooyin.fooyin", name = "Lyrics" },
-        geometry = { x = 3200, y = 1709, width = 788, height = 242 },
+        geometry = { x = 3200, y = 1711, width = 787, height = 240 },
       },
       {
         role = "bottom",
         tag = "minimeters",
         rule = { class = "app.minimeters.MiniMeters", name = "MiniMeters" },
-        geometry = { x = 3992, y = 1709, width = 830, height = 242 },
+        geometry = { x = 3993, y = 1707, width = 827, height = 245 },
       },
       {
         role = "bottom",
@@ -108,7 +108,7 @@ local profiles = {
         role = "bottom",
         tag = "minimeters",
         rule = { class = "app.minimeters.MiniMeters", name = "Waveform" },
-        geometry = { x = 3992, y = 1460, width = 469, height = 245 },
+        geometry = { x = 3992, y = 1459, width = 467, height = 244 },
       },
       {
         role = "bottom",
