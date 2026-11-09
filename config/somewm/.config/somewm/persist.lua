@@ -251,6 +251,15 @@ local function pinned_spec(c)
   return nil
 end
 
+-- Lock pinned XWayland windows (e.g. Rolling Sampler) against self-initiated
+-- X11 ConfigureRequests on mouse-over/focus: authoring `spec.geometry` inside
+-- `property::_x11_configure` zeroes `c->x11_configure.mask` before the frame
+-- is solved so the window stays at its pinned coordinates.
+client.connect_signal("property::_x11_configure", function(c)
+  local spec = pinned_spec(c)
+  if spec then c:geometry(spec.geometry) end
+end)
+
 -- Does `screen` own any pinned window? rc.lua asks this before realigning.
 M.screen_has_pinned_windows = function(s)
   for _, spec in ipairs(pinned) do

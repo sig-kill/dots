@@ -10,6 +10,41 @@ pcall(require, "luarocks.loader")
 local awful = require("awful")
 require("awful.autofocus")
 
+-- Work around somewm hot-reload bug (widget.c:1059): `luaA_hot_reload` only
+-- clears `w->widgets` on visible drawins (`globalconf.drawins`) before setting
+-- `globalconf.L = NULL` and calling `lua_close(L)`. Hidden popups still hold
+-- `w->widgets.shapes[i].ref`, causing `drawin_wipe` -> `widget_nodes_clear` to
+-- call `luaL_unref(NULL, ...)` during `lua_close`. Track every drawable and
+-- clear its C widget tree on `exit` while `globalconf.L` is still valid.
+do
+  local wdrawable = require("wibox.drawable")
+  local orig_new = wdrawable.new
+  local all_drawables = setmetatable({}, { __mode = "k" })
+
+  wdrawable.new = function(d, ...)
+    local ret = orig_new(d, ...)
+    if d then
+      all_drawables[ret] = d
+      local orig_inform = ret._inform_visible
+      ret._inform_visible = function(self, visible)
+        orig_inform(self, visible)
+        if not visible and d.valid ~= false then
+          pcall(d._clay_nodes, d, nil)
+        end
+      end
+    end
+    return ret
+  end
+
+  awesome.connect_signal("exit", function()
+    for _, d in pairs(all_drawables) do
+      if d.valid ~= false then
+        pcall(d._clay_nodes, d, nil)
+      end
+    end
+  end)
+end
+
 local autorun = require("autorun")
 local persist = require("persist")
 

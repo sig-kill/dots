@@ -515,7 +515,7 @@ end)
 M.widget:buttons(gears.table.join(
   awful.button({}, 1, function() M.toggle() end),
   awful.button({}, 2, function() M.toggle_dnd() end),
-  awful.button({}, 3, function() M.toggle_dnd() end)
+  awful.button({}, 3, function() M.clear() end)
 ))
 
 naughty.connect_signal("property::suspended", function()

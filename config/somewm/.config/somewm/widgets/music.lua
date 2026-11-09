@@ -38,12 +38,12 @@ local music = {}
 
 local BAR_ART_SZ = dpi(16)
 local BAR_MAX_CHARS = 50
-local POPUP_ART_SZ = dpi(88)
+local POPUP_ART_SZ = dpi(100)
 local POPUP_MIN_W = dpi(280)
 local POPUP_MAX_W = dpi(600)
 local BLUR_SZ = 14
-local WAVE_W, WAVE_H = 400, 40
-local WAVE_BOX_H = dpi(20)
+local WAVE_W, WAVE_H = 400, 64
+local WAVE_BOX_H = dpi(32)
 
 local MPRIS_DIR = (os.getenv("SOMEWM_TEST_NAME") and os.getenv("SOMEWM_TEST_STATE_DIR"))
   or os.getenv("XDG_RUNTIME_DIR")
@@ -66,11 +66,12 @@ local has_track, is_playing = false, false
 local progress_ratio = 0
 local last_pos_us, track_len_us, last_sync_us = 0, 0, 0
 local mpris_text, mpris_meta_key, mpris_art_url, mpris_wave_path
+local raw_title, raw_artist, raw_album = "", "", ""
 local art_surface, blur_surface, wave_surface
 local popup_bg_surface, wave_bg_surface
 local popup_bg_blur, popup_bg_pal, popup_bg_w, popup_bg_h
 local wave_bg_w, wave_bg_src, wave_bg_ratio, wave_bg_playing, wave_bg_pal
-local popup_w, popup_h = POPUP_MIN_W, dpi(108)
+local popup_w, popup_h = POPUP_MIN_W, dpi(122)
 local wave_w = math.max(dpi(100), POPUP_MIN_W - ((beautiful.border_width or dpi(2)) + dpi(8)) * 2)
 local art_seq, wave_seq = 0, 0
 local is_hovered, last_hover_geo = false, nil
@@ -563,30 +564,52 @@ local popup = wibox {
   ontop   = true,
   visible = false,
   width   = POPUP_MIN_W,
-  height  = dpi(108),
+  height  = dpi(122),
   bg      = gears.color.transparent,
   widget  = popup_root,
 }
 
 -- somewm 2.1 sizes widgets in Clay and removed the textbox measurement API
--- (`textbox:get_preferred_size`, `widget:fit`). These are the two numbers the
--- popup needs before its wibox has a box of its own: measure the same Pango
--- layout the textbox describes, at the screen's resolution.
+-- (`textbox:get_preferred_size`, `widget:fit`). Measure the same Pango layout
+-- the textbox describes at the screen's resolution, and split multi-line text
+-- with an explicit newline after line 1 because Clay only breaks `ellipsize`
+-- textboxes on `\n` (truncating line 2 with `…` if it still overflows).
 local measure_ctx = PangoCairo.font_map_get_default():create_context()
-local function text_extents(textbox, s, avail_w)
+local function text_extents(text, font, s)
+  if not text or text == "" then return 0, 0 end
   measure_ctx:set_resolution(s.dpi or 96)
   local layout = Pango.Layout.new(measure_ctx)
-  layout:set_font_description(beautiful.get_font(textbox:get_font() or beautiful.font))
-  layout:set_text(textbox:get_text() or "")
-  if avail_w and avail_w > 0 then
-    layout.width = math.max(1, math.floor(avail_w)) * Pango.SCALE
-    layout:set_wrap(Pango.WrapMode.WORD_CHAR)
-  else
-    layout.width = -1 -- no wrapping: the preferred width of the line
-  end
-  layout.height = -1048576
+  layout:set_font_description(beautiful.get_font(font or beautiful.font))
+  layout:set_text(text)
+  layout.width = -1
   local _, logical = layout:get_pixel_extents()
   return logical.width, logical.height
+end
+
+local function wrap_and_measure(raw, font, s, avail_w, max_lines)
+  local text = (raw or ""):gsub("%s*\n%s*", " ")
+  if text == "" then return "", 0, 0 end
+  measure_ctx:set_resolution(s.dpi or 96)
+  local layout = Pango.Layout.new(measure_ctx)
+  layout:set_font_description(beautiful.get_font(font or beautiful.font))
+  layout:set_text(text)
+  if max_lines and max_lines > 1 and avail_w and avail_w > 0 then
+    layout.width = math.max(1, math.floor(avail_w)) * Pango.SCALE
+    layout:set_wrap(Pango.WrapMode.WORD_CHAR)
+    if layout:get_line_count() > 1 then
+      local line0 = layout:get_line_readonly(0)
+      local split = (line0 and line0.start_index or 0) + (line0 and line0.length or 0)
+      local line1 = text:sub(1, split):gsub("%s+$", "")
+      local rest = text:sub(split + 1):gsub("^%s+", "")
+      if line1 ~= "" and rest ~= "" then
+        text = line1 .. "\n" .. rest
+      end
+    end
+  end
+  layout.width = -1
+  layout:set_text(text)
+  local _, logical = layout:get_pixel_extents()
+  return text, logical.width, logical.height
 end
 
 local function update_popup_geometry(geo)
@@ -603,9 +626,9 @@ local function update_popup_geometry(geo)
   local margin = dpi(5)
   local chrome_w = ((beautiful.border_width or dpi(2)) + dpi(8)) * 2
   local art_w = popup_art_slot.visible and (POPUP_ART_SZ + dpi(1) * 2 + dpi(10)) or 0
-  local title_w = text_extents(popup_title_text, s)
-  local artist_raw_w = text_extents(popup_artist_text, s)
-  local album_w = text_extents(popup_album_text, s)
+  local title_w = text_extents(raw_title, bold_font, s)
+  local artist_raw_w = text_extents(raw_artist, bold_font, s)
+  local album_w = text_extents(raw_album, beautiful.font, s)
   local artist_w = popup_artist_row.visible and (artist_raw_w + dpi(12)) or 0
   album_w = popup_album_row.visible and album_w or 0
   local text_w = math.ceil(math.max(title_w, artist_w, album_w))
@@ -614,35 +637,36 @@ local function update_popup_geometry(geo)
   local min_w = math.min(POPUP_MIN_W, max_w)
   local width = clamp(chrome_w + art_w + text_w, min_w, max_w)
 
-  -- Constrain right column and textboxes so long track/artist/album lines wrap cleanly.
+  -- Constrain right column and textboxes; wrap title and artist up to 2 lines.
   local right_w = math.max(dpi(100), width - chrome_w - art_w)
   local artist_avail_w = math.max(dpi(60), right_w - dpi(12))
+  local wrapped_title, _, title_h = wrap_and_measure(raw_title, bold_font, s, right_w, 2)
+  local wrapped_artist, artist_wrapped_w, artist_h = wrap_and_measure(raw_artist, bold_font, s, artist_avail_w, 2)
+  local _, _, album_h = wrap_and_measure(raw_album, beautiful.font, s, right_w, 1)
+
+  popup_title_text:set_text(wrapped_title)
+  popup_artist_text:set_text(wrapped_artist)
   popup_right_col.forced_width = right_w
   popup_title_text.forced_width = right_w
-  popup_artist_text.forced_width = (artist_w > right_w) and artist_avail_w or nil
+  popup_artist_text.forced_width = (artist_wrapped_w > artist_avail_w) and artist_avail_w or nil
   popup_album_text.forced_width = right_w
   wave_w = right_w
 
-  local _, title_h = text_extents(popup_title_text, s, right_w)
-  local _, artist_h = text_extents(popup_artist_text, s, artist_avail_w)
-  local _, album_h = text_extents(popup_album_text, s, right_w)
-
   -- Height used to come from the removed `popup_root:fit`; rebuild it from the
   -- layout's own numbers: each visible text row grows with its wrapped height,
-  -- the waveform is dpi(20) plus its top margin, and the art stack is the square
-  -- plus its 1px frame.
+  -- the waveform is WAVE_BOX_H plus its top margin, and the art stack is the
+  -- square plus its 1px frame.
   local gap = dpi(2)
-  local row_min_h = dpi(20)
-  local rows_h = math.max(row_min_h, math.ceil(title_h))
+  local rows_h = math.ceil(title_h)
   if popup_artist_row.visible then
-    rows_h = rows_h + gap + math.max(row_min_h, math.ceil(artist_h) + 2 * dpi(1))
+    rows_h = rows_h + gap + math.ceil(artist_h) + 2 * dpi(1)
   end
   if popup_album_row.visible then
-    rows_h = rows_h + gap + math.max(row_min_h, math.ceil(album_h))
+    rows_h = rows_h + gap + math.ceil(album_h)
   end
   if popup_duration_section.visible then
-    local _, pos_h = text_extents(popup_pos_text, s)
-    local _, len_h = text_extents(popup_len_text, s)
+    local _, pos_h = text_extents(popup_pos_text:get_text(), beautiful.font, s)
+    local _, len_h = text_extents(popup_len_text:get_text(), beautiful.font, s)
     rows_h = rows_h + gap + WAVE_BOX_H + dpi(2) + gap + math.ceil(math.max(pos_h, len_h))
   end
   local content_h = math.max(POPUP_ART_SZ + dpi(2), rows_h)
@@ -774,7 +798,7 @@ local function request_art(url)
   apply_art(uri_to_path(url))
 end
 
--- Spawn ffmpeg in the background on local tracks to render a 400x40 peak
+-- Spawn ffmpeg in the background on local tracks to render a 400x64 peak
 -- waveform PNG mask.
 local function request_waveform(path)
   wave_seq = wave_seq + 1
@@ -880,6 +904,9 @@ local function refresh_player_state()
       -- the wibar fg".
       text_slot:set_fg(is_playing and beautiful.fg_focus or nil)
 
+      raw_title = display_title
+      raw_artist = display_artist
+      raw_album = album
       popup_title_text:set_text(display_title)
       popup_title_slot:set_fg(is_playing and palette.accent or palette.artist_fg)
 

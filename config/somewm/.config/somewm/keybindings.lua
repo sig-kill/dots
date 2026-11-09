@@ -166,7 +166,9 @@ local function rename_tag_prompt()
 end
 
 local function take_screenshot()
-  awful.spawn.with_shell('grim -g "$(slurp)" - | swappy -f -')
+  awful.spawn.with_shell([[
+    wayfreeze --hide-cursor --enable-keyboard --after-freeze-cmd 'tmp=$(mktemp /tmp/wayfreeze-XXXXXX.png); g=$(slurp) && grim -g "$g" "$tmp"; kill $PPID; [ -s "$tmp" ] && swappy -f "$tmp"; rm -f "$tmp"'
+  ]])
 end
 
 -- Player start/pause. Shared by the mouse side button (mapped to

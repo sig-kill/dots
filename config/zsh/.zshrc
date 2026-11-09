@@ -80,6 +80,8 @@ _fix_cursor() { echo -ne '\e[5 q' }
 precmd_functions+=(_fix_cursor)
 # Reclaim <C-s> and <C-q>
 [[ -t 1 ]] && stty -ixon
+# Don't allow . and .. in globs
+GLOBIGNORE=".:.."
 
 # Power <Tab> with tv for certain commands
 TV_SMART_COMMANDS=( cd )

@@ -379,6 +379,9 @@ naughty.connect_signal("request::display", function(n)
     n:disconnect_signal("destroyed", detach)
     n:disconnect_signal("property::suspended", on_suspend)
     box.visible = false
+    if box._drawable and box._drawable.drawable then
+      pcall(box._drawable.drawable._clay_nodes, box._drawable.drawable, nil)
+    end
     local list = notif_boxes[s]
     if not list then return end
     for i, b in ipairs(list) do
