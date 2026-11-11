@@ -10,6 +10,7 @@ local widgets = {
   notes         = require("widgets.notes"),
   notifications = require("widgets.notifications"),
   systray       = require("widgets.systray"),
+  withdrawn     = require("widgets.withdrawn"),
 }
 
 -----------------------------
@@ -172,6 +173,14 @@ local cal_widget = calendar:get_widget()
 local base_embed = cal_widget:get_fn_embed()
 cal_widget:set_fn_embed(function(widget, flag, date)
   local out = base_embed(widget, flag, date)
+  if date and date.year and date.month and date.day then
+    local wday = os.date("*t", os.time{year=date.year, month=date.month, day=date.day, hour=12}).wday
+    if wday == 1 or wday == 7 then
+      if flag == "normal" or flag == "weekday" then
+        out.bg = beautiful.calendar_weekend_bg or "#242E34"
+      end
+    end
+  end
   if calendar_pinned then
     if flag == "month" then
       out.border_color = beautiful.border_color_active
@@ -280,6 +289,7 @@ widgets.wibar = function(s, opts)
       -- Right widgets
       horizontal_row {
         opts.tray ~= false and wibox.widget.systray(),
+        opts.withdrawn == true and widgets.withdrawn.widget,
         opts.media ~= false and widgets.music.widget,
         opts.notifications ~= false and widgets.notifications.widget,
         opts.caffeine ~= false and widgets.caffeine.widget,

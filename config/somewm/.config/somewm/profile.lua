@@ -76,7 +76,7 @@ local profiles = {
     },
     wibar_config = {
       left   = { position = "top" },
-      middle = { position = "top" },
+      middle = { position = "top", withdrawn = true },
       bottom = { position = "top", tray = false, caffeine = false, notifications = false, clock = false },
       right  = { position = "bottom", tray = false, media = false, caffeine = false, notifications = false },
     },

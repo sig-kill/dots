@@ -17,11 +17,11 @@ local M = {}
 -- test compositor (somewm-client test exports SOMEWM_TEST_NAME and
 -- SOMEWM_TEST_STATE_DIR) keeps its cache in its own state directory, so it
 -- cannot overwrite the live file when it exits or reloads. Otherwise the
--- config-dir file is used.
+-- cache-dir file is used.
 local CACHE_PATH = os.getenv("SOMEWM_PERSIST_WINDOWS")
     or (os.getenv("SOMEWM_TEST_NAME")
         and ((os.getenv("SOMEWM_TEST_STATE_DIR") or "/tmp") .. "/persist_windows"))
-    or (gears.filesystem.get_configuration_dir() .. ".persist_windows")
+    or (gears.filesystem.get_cache_dir() .. ".persist_windows")
 
 -- Display roles left out of the cache. The bottom output holds manually
 -- arranged windows pinned by profile.pinned_windows, so its tag state and

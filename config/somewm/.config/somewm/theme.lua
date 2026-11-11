@@ -14,6 +14,7 @@ theme.fg_urgent                = "#F18284"
 theme.bg_normal                = "#1A2227"
 theme.bg_focus                 = "#2D373C"
 theme.bg_urgent                = "#382025"
+theme.calendar_weekend_bg      = "#242E34"
 -- Border
 theme.border_width             = dpi(2)
 theme.useless_gap              = dpi(4)
